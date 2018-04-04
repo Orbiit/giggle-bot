@@ -10,4 +10,5 @@ fascinating
 anyhow...
 
 # check out my cool pagination!
-![./blob/master/example.gif](i type in `pagetest` and the thing appears)
+
+![i type in `pagetest` and the thing appears](blob/master/example.gif "hey")
