@@ -1,0 +1,10 @@
+{
+  "name": "giggle-bot",
+  "version": "1.0.0",
+  "description": "some random bot (again)",
+  "main": "main.js",
+  "author": "l'shep",
+  "dependencies": {
+    "discord.js": "^11.3.2"
+  }
+}
