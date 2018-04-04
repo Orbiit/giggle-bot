@@ -1,0 +1,10 @@
+{
+  "@moofy-bot your commands": "opens this",
+  "who's @moofy-bot": "opens the about thingy",
+  "hate": "trigger the bot",
+  "pagination test": "a pagination test; the demo lets you select a word for it to spell out",
+  "use this channel": "sets the channel for where an external echo should go",
+  "echo(c)(e)(s): message": "sends what you sent. flags: c - put the message in a code block; e - sends the message to a different channel set by the `use this channel` command; s - doesn't trim the whitespace after the colon",
+  "dumb bot": "trigger the bot",
+  "should've": "learn proper grammar"
+}
