@@ -6,5 +6,8 @@
   "use this channel": "sets the channel for where an external echo should go",
   "echo(c)(e)(s): message": "sends what you sent. flags: c - put the message in a code block; e - sends the message to a different channel set by the `use this channel` command; s - doesn't trim the whitespace after the colon",
   "dumb bot": "trigger the bot",
-  "should've": "learn proper grammar"
+  "should've": "learn proper grammar",
+  "@moofy-bot delete 10": "takes the 10 latest messages and deletes the ones that are from the bot",
+  "@moofy-bot react [emoji]": "reacts the emoji (unless it's a custom one, or if it's thumbs up/down) on a message. you can set the message by reacting TREE on it (for some reason it doesn't work if the message existed before the bot restarted)",
+  "inspect emoji": "opens up an emoji inspector that inspects the emoji from a reaction"
 }
