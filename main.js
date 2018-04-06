@@ -1,3 +1,4 @@
+const fs = require("fs");
 const Discord = require("discord.js");
 const client = new Discord.Client();
 
@@ -5,6 +6,7 @@ const Token = require("./secret_stuff.json");
 const words = require("./items.json");
 const commands = require("./command-list.json");
 const botinfo = require("./about.json");
+const userData = require("./users.json");
 
 const thumbs_up = "👍";
 const thumbs_down = "👎";
@@ -14,15 +16,62 @@ const right = "➡";
 const up = "🔼";
 const down = "🔽";
 const tree = "🌳";
+const selected = "▶";
+const unselected = "⬛";
 const colour = 0x00BCD4;
 
-const maxWordsPerPage = 10;
+const maxItemsPerPage = 10;
+const latestUserVersion = 2;
+
+const pageTypes = {
+  speller: {
+    name: "speller",
+    list: words,
+    onselect(word, channel) {
+      channel.send(`"${word}" is spelled \`${word.toUpperCase().split("").join("-")}\``);
+    }
+  },
+  commandList: {
+    name: "command list",
+    list: Object.keys(commands).map(c => `\`${c}\``),
+    onselect(command, channel, index, setTitle) {
+      setTitle(`**${command}**`);
+      return commands[command.slice(1, -1)].replace(/TREE/g, tree);
+    }
+  }
+};
 
 let paginations = [],
 paginationData = {},
 externalEchoChannel = null,
 reactTarget = null,
-emojiInfos = {};
+emojiInfos = {},
+scheduledUserDataUpdate = null;
+
+Object.keys(userData).map(id => userData[id].v < latestUserVersion ? prepareUser(id) : 0);
+function prepareUser(id) {
+  if (!userData[id]) userData[id] = {v: 0};
+  if (userData[id].v === latestUserVersion) return;
+  switch (userData[id].v) {
+    case 0:
+      userData[id].money = 0;
+      userData[id].stats = {};
+      userData[id].joined = Date.now();
+      userData[id].name = `<@${id}>`;
+    case 1:
+      userData[id].inventory = {};
+  }
+  userData[id].v = latestUserVersion;
+  updateUserData();
+}
+
+function updateUserData() {
+  if (scheduledUserDataUpdate !== null) clearTimeout(scheduledUserDataUpdate);
+  scheduledUserDataUpdate = setTimeout(() => {
+    scheduledUserDataUpdate = null;
+    fs.writeFile("./users.json", JSON.stringify(userData), () => {});
+  }, 100);
+}
 
 client.on("ready", () => {
   console.log(`Logged in as ${client.user.tag}!`);
@@ -41,19 +90,7 @@ client.on("message", msg => {
   } else if (msg.mentions.users.has(client.user.id) || /^moofy,? */.test(msg.content)) {
     let sendOK = true;
     if (/\b(help|((your|ur) *)?commands?)\b/i.test(msg.content)) {
-      let content = [];
-      msg.channel.send({
-        embed: {
-          footer: {
-            text: `good luck!`
-          },
-          description: Object.keys(commands).map(c => {
-            return `**\`${c.replace(/TREE/g, tree)}\`** ${commands[c].replace(/TREE/g, tree)}`;
-          }).join("\n\n"),
-          title: "command list",
-          color: colour
-        }
-      });
+      initPagination(msg, "commandList");
     } else if (/\bwho\b/i.test(msg.content)) {
       let content = [];
       msg.channel.send({
@@ -97,35 +134,7 @@ client.on("message", msg => {
     }
     if (sendOK) msg.react(ok);
   } else if (/\bpag(e|ination) *test\b/i.test(msg.content)) {
-    let embed = new Discord.RichEmbed({
-      footer: {
-        text: `react/unreact to switch pages`
-      },
-      description: "loading...",
-      title: "loading...",
-      color: colour
-    });
-    msg.channel.send({
-      embed: embed
-    })
-    .then(msg => {
-      msg.react(left)
-      .then(() => msg.react(right))
-      .then(() => msg.react(up))
-      .then(() => msg.react(down))
-      .then(() => msg.react(ok))
-      .then(() => {
-        paginations.push(msg.id);
-        paginationData[msg.id] = {
-          embed: embed,
-          msg: msg,
-          page: 0,
-          cursor: 0
-        };
-        updatePagination(paginationData[msg.id]);
-      })
-      .catch(console.error);
-    });
+    initPagination(msg, "speller");
     msg.react(ok);
   } else if (/\buse *this *channel\b/i.test(msg.content)) {
     externalEchoChannel = msg.channel;
@@ -158,7 +167,10 @@ client.on("message", msg => {
     let echo = /echo(c?)(e?)(s?):([^]+)/im.exec(msg.content),
     // c - enclose in codeblock; e - external; s - don't trim ("strict")
     ofNotHaveRegex = /\b(could|might|should|will|would)(?:'?ve| +have)\b/gi,
-    ofNotHave = ofNotHaveRegex.exec(msg.content);
+    ofNotHave = ofNotHaveRegex.exec(msg.content),
+    random = /\b(actually\s*)?(?:pick\s*)?(?:a\s*)?rand(?:om)?\s*num(?:ber)?\s*(?:d'|from|between)?\s*([0-9]+)\s*(?:-|to|t'|&|and|n')?\s*([0-9]+)/i.exec(msg.content),
+    getMoney = /(\bmy|<@!?([0-9]+)>(?:'?s)?)\s*(?:money|bcbw)/i.exec(msg.content),
+    setName = /\bmy\s*name\s*(?:'s|is)\s+(.+)/i.exec(msg.content);
     if (echo) {
       let circumfix = echo[1] ? "```" : "",
       content = (echo[3] ? echo[4] : echo[4].trim()) || "/shrug";
@@ -170,51 +182,112 @@ client.on("message", msg => {
         + msg.content.replace(ofNotHaveRegex, "$1 OF") + "```"
       );
       msg.react(thumbs_down);
+    } else if (random) {
+      let r,
+      nums = [+random[2], +random[3]],
+      min = Math.min(...nums), max = Math.max(...nums);
+      if (random[1]) {
+        r = Math.floor(Math.random() * (max - min + 1) + min);
+      } else {
+        let randomDigits = [7, 6, 3, 5, 4, 9, 8, 2, 1, 0]; // most to least "random"
+        r = "";
+        while (+r <= max - min) {
+          r += randomDigits[Math.floor(Math.random() ** 3 * 10)];
+        }
+        r = +r.slice(0, -1) + min;
+      }
+      msg.channel.send(`<@${msg.author.id}> hmmm... I choose... **${r}**!`);
+    } else if (getMoney) {
+      let user = getMoney[1] === "my" ? msg.author.id : getMoney[2];
+      prepareUser(user);
+      msg.channel.send(`**${userData[user].name}** has **\`${userData[user].money}\`** bitcoin but worse`);
+    } else if (setName) {
+      prepareUser(msg.author.id);
+      updateUserData(userData[msg.author.id].name = setName[1].trim());
+      msg.channel.send(`hi, nice to meet you **${userData[msg.author.id].name}**`);
     }
   }
 });
 
+function initPagination(msg, type) {
+  let embed = new Discord.RichEmbed({
+    footer: {
+      text: `react/unreact to switch pages`
+    },
+    description: "loading...",
+    title: "loading...",
+    color: colour
+  });
+  msg.channel.send({
+    embed: embed
+  })
+  .then(msg => {
+    msg.react(left)
+    .then(() => msg.react(right))
+    .then(() => msg.react(up))
+    .then(() => msg.react(down))
+    .then(() => msg.react(ok))
+    .then(() => {
+      paginations.push(msg.id);
+      paginationData[msg.id] = {
+        embed: embed,
+        msg: msg,
+        page: 0,
+        cursor: 0,
+        type: type
+      };
+      updatePagination(paginationData[msg.id]);
+    })
+    .catch(console.error);
+  });
+}
 function updatePagination(page) {
-  page.embed.setTitle(`speller - page ${page.page + 1}`);
   let content = "",
-  offset = page.page * maxWordsPerPage;
-  for (let i = 0; i < maxWordsPerPage; i++) {
-    if (i + offset >= words.length) break;
-    content += "\n" + (i === page.cursor ? ">" : " ") + " ";
-    content += words[i + offset];
+  offset = page.page * maxItemsPerPage,
+  list = pageTypes[page.type].list;
+  for (let i = 0; i < maxItemsPerPage; i++) {
+    if (i + offset >= list.length) break;
+    content += "\n" + (i === page.cursor ? selected : unselected) + " ";
+    content += `**${list[i + offset]}**`;
   }
-  page.embed.setDescription("```" + content + "```");
+  page.embed.setTitle(`${pageTypes[page.type].name} - page ${page.page + 1} of ${Math.ceil(list.length / maxItemsPerPage)}`);
+  page.embed.setDescription(content);
   page.msg.edit(page.embed);
 }
 function messageReactionUpdate(reaction, id) {
-  let pages = Math.ceil(words.length / maxWordsPerPage);
+  let page = paginationData[id],
+  list = pageTypes[page.type].list,
+  pages = Math.ceil(list.length / maxItemsPerPage);
   switch (reaction) {
     case left:
-      if (paginationData[id].page > 0)
-        paginationData[id].page--, paginationData[id].cursor = 0;
+      if (page.page > 0)
+        page.page--, page.cursor = 0;
       break;
     case right:
-      if (paginationData[id].page < pages - 1)
-        paginationData[id].page++, paginationData[id].cursor = 0;
+      if (page.page < pages - 1)
+        page.page++, page.cursor = 0;
       break;
     case up:
-      if (paginationData[id].cursor > 0)
-        paginationData[id].cursor--;
+      if (page.cursor > 0)
+        page.cursor--;
       break;
     case down:
-      let max = maxWordsPerPage;
-      if (paginationData[id].page === pages - 1) max = words.length % maxWordsPerPage;
-      if (paginationData[id].cursor < max - 1)
-        paginationData[id].cursor++;
+      let max = maxItemsPerPage;
+      if (page.page === pages - 1) max = list.length % maxItemsPerPage;
+      if (page.cursor < max - 1)
+        page.cursor++;
       break;
     case ok:
-      paginationData[id].embed.setFooter("selected");
-      paginationData[id].msg.edit(paginationData[id].embed);
+      let index = page.page * maxItemsPerPage + page.cursor,
+      chosen = pageTypes[page.type].list[index],
+      newContent = pageTypes[page.type].onselect(chosen, page.msg.channel, index, newTitle => {
+        page.embed.setTitle(newTitle);
+      });
+      if (newContent !== undefined) page.embed.setDescription(newContent);
 
-      let word = words[paginationData[id].page * maxWordsPerPage + paginationData[id].cursor];
-      paginationData[id].msg.channel.send(`"${word}" is spelled \`${word.toUpperCase().split("").join("-")}\``);
-
-      paginationData[id].msg.reactions.map(r => {
+      page.embed.setFooter("selected");
+      page.msg.edit(page.embed);
+      page.msg.reactions.map(r => {
         r.remove(client.user);
       });
 
