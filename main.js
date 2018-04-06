@@ -7,6 +7,7 @@ const words = require("./items.json");
 const commands = require("./command-list.json");
 const botinfo = require("./about.json");
 const userData = require("./users.json");
+const marketData = require("./market-items.json");
 
 const thumbs_up = "👍";
 const thumbs_down = "👎";
@@ -35,9 +36,23 @@ const pageTypes = {
   commandList: {
     name: "command list",
     list: Object.keys(commands).map(c => `\`${c}\``),
-    onselect(command, channel, index, setTitle) {
+    onselect(command, channel, setTitle, otherStuff) {
       setTitle(`**${command}**`);
       return commands[command.slice(1, -1)].replace(/TREE/g, tree);
+    }
+  },
+  market: {
+    name: "market",
+    list: Object.keys(marketData),
+    onselect(name, channel, setTitle, otherStuff) {
+      let item = marketData[name];
+      setTitle(item.emoji + " " + name);
+      questionAwaits[otherStuff.reactor.id] = {
+        type: "marketBuy",
+        args: name
+      };
+      return `Price: **\`${item.price}\`** bitcoin but worse\n`
+        + `\nHow many do you want to buy? (\`cancel\` to cancel)`;
     }
   }
 };
@@ -59,6 +74,29 @@ const questionResponseResponders = {
     } else {
       return false;
     }
+    return true;
+  },
+  marketBuy(msg, name) {
+    let quantity = Math.abs(Math.round(+msg));
+    if (!isNaN(quantity)) {
+      let item = marketData[name],
+      totalCost = quantity * item.price;
+      prepareUser(msg.author.id);
+      if (totalCost > userData[msg.author.id].money) {
+        msg.channel.send(`**${userData[msg.author.id].name}** you don't have enough bitcoin but worse :/`);
+        msg.react(thumbs_down);
+      } else {
+        userData[msg.author.id].money -= totalCost;
+        prepareUserForItem(msg.author.id, name);
+        userData[msg.author.id].inventory[name] += quantity;
+        updateUserData();
+        msg.channel.send(`**${userData[msg.author.id].name}** thank you for your purchase.\n`
+          + `you bought ${quantity}x ${name} for \`${totalCost}\` bitcoin but worse`);
+        msg.react(ok);
+      }
+    }
+    else if (msg.toLowerCase() === "cancel" || msg.toLowerCase() === "nvm") msg.react(ok);
+    else return false;
     return true;
   }
 };
@@ -89,6 +127,10 @@ function prepareUser(id) {
   }
   userData[id].v = latestUserVersion;
   updateUserData();
+}
+function prepareUserForItem(userID, itemName) {
+  if (userData[userID].inventory[itemName] === undefined)
+    userData[userID].inventory[itemName] = 0;
 }
 
 function updateUserData() {
@@ -136,7 +178,7 @@ client.on("message", msg => {
           url: botinfo.repo
         }
       });
-    } else if (/\bhow\s*(r|are)\s*(u|you)\b/i.test(msg.content)) {
+    } else if (/\bhow *(r|are) *(u|you)\b/i.test(msg.content)) {
       let feelings = ["good", "ok", "bad"],
       feeling = feelings[Math.floor(Math.random() * feelings.length)];
       msg.channel.send(`i'm feeling ${feeling}. and you?`)
@@ -144,6 +186,8 @@ client.on("message", msg => {
         type: "howRU",
         args: feeling
       };
+    } else if (/\bmarket\b/i.test(msg.content)) {
+      initPagination(msg, "market");
     } else {
       let deleteRegex = /\bdelete *([0-9]+)\b/i.exec(msg.content),
       react = /\breact *(\S{1,2})/i.exec(msg.content);
@@ -203,7 +247,7 @@ client.on("message", msg => {
     msg.channel.send(`<@${msg.author.id}>` + " make sure you set `keepInventory` to `false` :)");
     sendOK = false;
     msg.react(thumbs_down);
-  } else if (/\bmy\s*daily\b/i.test(msg.content)) {
+  } else if (/\bmy *daily\b/i.test(msg.content)) {
     prepareUser(msg.author.id);
     let now = Date.now(),
     timeSince = now - userData[msg.author.id].lastDaily,
@@ -230,10 +274,11 @@ client.on("message", msg => {
     let echo = /echo(c?)(x?)(s?)(e?):([^]+)/im.exec(msg.content),
     ofNotHaveRegex = /\b(could|might|should|will|would)(?:'?ve| +have)\b/gi,
     ofNotHave = ofNotHaveRegex.exec(msg.content),
-    random = /\b(actually\s*)?(?:pick\s*)?(?:a\s*)?rand(?:om)?\s*num(?:ber)?\s*(?:d'|from|between)?\s*([0-9]+)\s*(?:-|to|t'|&|and|n')?\s*([0-9]+)/i.exec(msg.content),
-    getMoney = /(\bmy|<@!?([0-9]+)>(?:'?s)?)\s*(?:money|bcbw)/i.exec(msg.content),
-    setName = /\bmy\s*name\s*(?:'s|is)\s+(.+)/i.exec(msg.content),
-    giveMoney = /\bgive\s*<@!?([0-9]+)>\s*([0-9]+)\s*(?:money|bcbw)\b/i.exec(msg.content);
+    random = /\b(actually *)?(?:pick *)?(?:a *)?rand(?:om)? *num(?:ber)? *(?:d'|from|between)? *([0-9]+) *(?:-|to|t'|&|and|n')? *([0-9]+)/i.exec(msg.content),
+    getMoney = /(\bmy|<@!?([0-9]+)>(?:'?s)?) *(?:money|bcbw)/i.exec(msg.content),
+    setName = /\bmy *name *(?:'s|is) +(.+)/i.exec(msg.content),
+    giveMoney = /\bgive *<@!?([0-9]+)> *([0-9]+) *(?:money|bcbw)\b/i.exec(msg.content),
+    getInventory = /(\bmy|<@!?([0-9]+)>(?:'?s)?) *inv(?:entory)?/i.exec(msg.content);
     if (echo) {
       let circumfix = echo[1] ? "```" : "",
       content = (echo[3] ? echo[5] : echo[5].trim()) || "/shrug";
@@ -291,6 +336,14 @@ client.on("message", msg => {
         msg.channel.send(`sorry, can't work with that amount <@${msg.author.id}>`);
         msg.react(thumbs_down);
       }
+    } else if (getInventory) {
+      let user = getInventory[1] === "my" ? msg.author.id : getInventory[2];
+      prepareUser(user);
+      let content = "";
+      for (let item in userData[user].inventory) {
+        content += `\n${marketData[item].emoji} x${userData[user].inventory[item]}`;
+      }
+      msg.channel.send(`**${userData[user].name}** has:${content || "\n\n...nothing! :("}`);
     } else {
       sendOK = false;
     }
@@ -343,8 +396,8 @@ function updatePagination(page) {
   page.embed.setDescription(content);
   page.msg.edit(page.embed);
 }
-function messageReactionUpdate(reaction, id) {
-  let page = paginationData[id],
+function messageReactionUpdate(reaction, messageID, user) {
+  let page = paginationData[messageID],
   list = pageTypes[page.type].list,
   pages = Math.ceil(list.length / maxItemsPerPage);
   switch (reaction) {
@@ -369,8 +422,11 @@ function messageReactionUpdate(reaction, id) {
     case ok:
       let index = page.page * maxItemsPerPage + page.cursor,
       chosen = pageTypes[page.type].list[index],
-      newContent = pageTypes[page.type].onselect(chosen, page.msg.channel, index, newTitle => {
+      newContent = pageTypes[page.type].onselect(chosen, page.msg.channel, newTitle => {
         page.embed.setTitle(newTitle);
+      }, {
+        index: index,
+        reactor: user
       });
       if (newContent !== undefined) page.embed.setDescription(newContent);
 
@@ -380,13 +436,13 @@ function messageReactionUpdate(reaction, id) {
         r.remove(client.user);
       });
 
-      delete paginationData[id];
-      paginations.splice(paginations.indexOf(id), 1);
+      delete paginationData[messageID];
+      paginations.splice(paginations.indexOf(messageID), 1);
       return true;
     default:
       return false;
   }
-  updatePagination(paginationData[id]);
+  updatePagination(paginationData[messageID]);
   return true;
 }
 
@@ -404,11 +460,11 @@ client.on("messageReactionAdd", (reaction, user) => {
     delete emojiInfos[id];
   } else if (reaction.emoji.name === tree) {
     reactTarget = reaction.message;
-  } else if (~paginations.indexOf(id) && messageReactionUpdate(reaction.emoji.name, id));
+  } else if (~paginations.indexOf(id) && messageReactionUpdate(reaction.emoji.name, id, user));
 });
 client.on("messageReactionRemove", (reaction, user) => {
   let id = reaction.message.id;
-  if (~paginations.indexOf(id) && messageReactionUpdate(reaction.emoji.name, id));
+  if (~paginations.indexOf(id) && messageReactionUpdate(reaction.emoji.name, id, user));
 });
 
 client.login(Token.token);

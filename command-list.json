@@ -15,5 +15,9 @@
   "my bcbw": "tells you how much bitcoin but worse (BCBW) you have",
   "@person's bcbw": "tells you how much bitcoin but worse (BCBW) the given person has",
   "my name is Bob": "sets your nickname to Bob so that in the future it doesn't mention spam you whenever someone else wants to know how much money you have or whatever",
-  "give @person 123 bcbw": "gives the bitcoin but worse (BCBW) to the given person"
+  "give @person 123 bcbw": "gives the bitcoin but worse (BCBW) to the given person",
+  "moofy market": "opens the market",
+  "my inventory": "shows you your inventory's contents",
+  "@person's inventory": "shows you the given person's inventory's contents",
+  "my daily": "get your daily `500` bitcoin but worse (BCBW)"
 }
