@@ -4,15 +4,16 @@
   "hate": "trigger the bot",
   "pagination test": "a pagination test; the demo lets you select a word for it to spell out. this was the first command made for variant `giggle-bot`",
   "use this channel": "sets the channel for where an external echo should go",
-  "echo(c)(e)(s): message": "sends what you sent. flags: c - put the message in a code block; e - sends the message to a different channel set by the `use this channel` command; s - doesn't trim the whitespace after the colon",
+  "echo(c)(x)(s)(e): message": "sends what you sent.\n**flags**\nc - put the message in a code block\nx - sends the message to a different channel set by the `use this channel` command\ns - doesn't trim the whitespace after the colon\ne - puts the message in an embed (something that only bots can post)",
   "dumb bot": "trigger the bot",
   "should've": "learn proper grammar",
   "@moofy-bot delete 10": "takes the 10 latest messages and deletes the ones that are from the bot",
   "@moofy-bot react [emoji]": "reacts the emoji (unless it's a custom one, or if it's thumbs up/down) on a message. you can set the message by reacting TREE on it (for some reason it doesn't work if the message existed before the bot restarted)",
   "inspect emoji": "opens up an emoji inspector that inspects the emoji from a reaction",
-  "pick a random number between 1 and 10": "picks a number",
-  "actually pick a random number between 1 and 10": "picks a *random* number",
-  "my money": "tells you how much bitcoin but worse (BCBW) you have",
-  "@person's money": "tells you how much bitcoin but worse (BCBW) the given person has",
-  "my name is Bob": "sets your nickname to Bob so that in the future it doesn't mention spam you whenever someone else wants to know how much money you have or whatever"
+  "pick a random number between 1 and 10": "picks a number between the given range",
+  "actually pick a random number between 1 and 10": "picks a *random* number between the given range",
+  "my bcbw": "tells you how much bitcoin but worse (BCBW) you have",
+  "@person's bcbw": "tells you how much bitcoin but worse (BCBW) the given person has",
+  "my name is Bob": "sets your nickname to Bob so that in the future it doesn't mention spam you whenever someone else wants to know how much money you have or whatever",
+  "give @person 123 bcbw": "gives the bitcoin but worse (BCBW) to the given person"
 }

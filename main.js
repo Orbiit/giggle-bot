@@ -21,7 +21,8 @@ const unselected = "⬛";
 const colour = 0x00BCD4;
 
 const maxItemsPerPage = 10;
-const latestUserVersion = 2;
+const latestUserVersion = 3;
+const day = 24 * 60 * 60 * 1000;
 
 const pageTypes = {
   speller: {
@@ -40,13 +41,35 @@ const pageTypes = {
     }
   }
 };
+const questionResponseResponders = {
+  howRU(msg, args) {
+    let same = /\b(same|agree|also|too)\b/i.test(msg.content),
+    bad = same && args === "bad" || /\b(bad|sad|mad|unhappy|horrible)\b/i.test(msg.content),
+    ok = same && args === "ok" || /\b(ok|meh|idk|eh+)\b/i.test(msg.content),
+    good = same && args === "good" || /\b(good|great|happy|excited)\b/i.test(msg.content);
+    if (bad) {
+      if (args === "bad") msg.channel.send("we can feel bad together!");
+      else msg.channel.send("oh i'm very sorry to hear that");
+    } else if (ok) {
+      if (args === "ok") msg.channel.send("good to know");
+      else msg.channel.send("that's ok too");
+    } else if (good) {
+      if (args === "good") msg.channel.send("yay we can be the happy group");
+      else msg.channel.send("that's good!");
+    } else {
+      return false;
+    }
+    return true;
+  }
+};
 
 let paginations = [],
 paginationData = {},
 externalEchoChannel = null,
 reactTarget = null,
 emojiInfos = {},
-scheduledUserDataUpdate = null;
+scheduledUserDataUpdate = null,
+questionAwaits = {};
 
 Object.keys(userData).map(id => userData[id].v < latestUserVersion ? prepareUser(id) : 0);
 function prepareUser(id) {
@@ -60,6 +83,9 @@ function prepareUser(id) {
       userData[id].name = `<@${id}>`;
     case 1:
       userData[id].inventory = {};
+    case 2:
+      userData[id].lastDaily = 0;
+      userData[id].dailyStreak = 0;
   }
   userData[id].v = latestUserVersion;
   updateUserData();
@@ -79,6 +105,12 @@ client.on("ready", () => {
 
 client.on("message", msg => {
   if (msg.author.id === client.user.id) return;
+  if (questionAwaits[msg.author.id]) {
+    let invalid = questionResponseResponders[questionAwaits[msg.author.id].type](msg, questionAwaits[msg.author.id].args);
+    delete questionAwaits[msg.author.id];
+    if (!invalid) return;
+  }
+  let sendOK = true;
   if (/\b(hate|hated|hates|hating|hatred|hater|haters)\b/i.test(msg.content)) {
     let hat = {h: "l", H: "L", a: "o", A: "O", t: "v", T: "V"};
     msg.channel.send(`hey hey hey <@${msg.author.id}> don't be so negative! try this:`
@@ -86,9 +118,9 @@ client.on("message", msg => {
         /\b(hat)(e(s|d|rs?)?|ing)\b/gi,
         (m, c1, c2) => c1.split("").map(l => hat[l]).join("") + c2
       ).replace(/hatred/g, "love") + "```");
+    sendOK = false;
     msg.react(thumbs_down);
   } else if (msg.mentions.users.has(client.user.id) || /^moofy,? */.test(msg.content)) {
-    let sendOK = true;
     if (/\b(help|((your|ur) *)?commands?)\b/i.test(msg.content)) {
       initPagination(msg, "commandList");
     } else if (/\bwho\b/i.test(msg.content)) {
@@ -104,6 +136,14 @@ client.on("message", msg => {
           url: botinfo.repo
         }
       });
+    } else if (/\bhow\s*(r|are)\s*(u|you)\b/i.test(msg.content)) {
+      let feelings = ["good", "ok", "bad"],
+      feeling = feelings[Math.floor(Math.random() * feelings.length)];
+      msg.channel.send(`i'm feeling ${feeling}. and you?`)
+      questionAwaits[msg.author.id] = {
+        type: "howRU",
+        args: feeling
+      };
     } else {
       let deleteRegex = /\bdelete *([0-9]+)\b/i.exec(msg.content),
       react = /\breact *(\S{1,2})/i.exec(msg.content);
@@ -127,20 +167,20 @@ client.on("message", msg => {
           reactTarget.react(react[1]);
         } catch (e) {
           msg.channel.send(`<@${msg.author.id}> **\`\`\`${e.toString().toUpperCase()}\`\`\`**`);
+          sendOK = false;
         }
       } else {
         msg.channel.send(`<@${msg.author.id}> DON'T MENTION ME YET`);
+        sendOK = false;
       }
     }
-    if (sendOK) msg.react(ok);
   } else if (/\bpag(e|ination) *test\b/i.test(msg.content)) {
     initPagination(msg, "speller");
-    msg.react(ok);
   } else if (/\buse *this *channel\b/i.test(msg.content)) {
     externalEchoChannel = msg.channel;
-    msg.react(ok);
   } else if (/\bdumb\b/i.test(msg.content) && /\bbot\b/i.test(msg.content)) {
     msg.channel.send(`DID I JUST HEAR "dumb" AND "bot" USED TOGETHER??!!??!11!?1/!?`);
+    sendOK = false;
     msg.react(thumbs_down);
   } else if (/\binspect *emoji\b/i.test(msg.content)) {
     let embed = new Discord.RichEmbed({
@@ -159,28 +199,59 @@ client.on("message", msg => {
         msg: msg
       };
     });
-    msg.react(ok);
   } else if (/\bkeepInventory\b/i.test(msg.content) && msg.author.username === "Gamepro5") {
     msg.channel.send(`<@${msg.author.id}>` + " make sure you set `keepInventory` to `false` :)");
+    sendOK = false;
     msg.react(thumbs_down);
+  } else if (/\bmy\s*daily\b/i.test(msg.content)) {
+    prepareUser(msg.author.id);
+    let now = Date.now(),
+    timeSince = now - userData[msg.author.id].lastDaily,
+    addendum = "";
+    if (timeSince >= day) {
+      userData[msg.author.id].money += 500;
+      if (timeSince > day * 2 && userData[msg.author.id].lastDaily > 0) {
+        addendum = `\nrip, you lost your ${userData[msg.author.id].dailyStreak}-day streak`
+        userData[msg.author.id].dailyStreak = 0;
+      }
+      userData[msg.author.id].lastDaily = now;
+      userData[msg.author.id].dailyStreak++;
+      updateUserData();
+      msg.channel.send(`<@${msg.author.id}> good job! here's **\`500\`** bitcoin but worse for you :D\n`
+        + `(${userData[msg.author.id].dailyStreak}-day streak!)` + addendum);
+    } else {
+      let lastDaily = new Date(userData[msg.author.id].lastDaily);
+      msg.channel.send(`<@${msg.author.id}> be patient! you last got your daily at `
+        + `${(lastDaily.getHours() + 11) % 12 + 1}:${("0" + lastDaily.getMinutes()).slice(-2)} ${lastDaily.getHours() < 12 ? "a" : "p"}m`);
+      sendOK = false;
+      msg.react(thumbs_down);
+    }
   } else {
-    let echo = /echo(c?)(e?)(s?):([^]+)/im.exec(msg.content),
-    // c - enclose in codeblock; e - external; s - don't trim ("strict")
+    let echo = /echo(c?)(x?)(s?)(e?):([^]+)/im.exec(msg.content),
     ofNotHaveRegex = /\b(could|might|should|will|would)(?:'?ve| +have)\b/gi,
     ofNotHave = ofNotHaveRegex.exec(msg.content),
     random = /\b(actually\s*)?(?:pick\s*)?(?:a\s*)?rand(?:om)?\s*num(?:ber)?\s*(?:d'|from|between)?\s*([0-9]+)\s*(?:-|to|t'|&|and|n')?\s*([0-9]+)/i.exec(msg.content),
     getMoney = /(\bmy|<@!?([0-9]+)>(?:'?s)?)\s*(?:money|bcbw)/i.exec(msg.content),
-    setName = /\bmy\s*name\s*(?:'s|is)\s+(.+)/i.exec(msg.content);
+    setName = /\bmy\s*name\s*(?:'s|is)\s+(.+)/i.exec(msg.content),
+    giveMoney = /\bgive\s*<@!?([0-9]+)>\s*([0-9]+)\s*(?:money|bcbw)\b/i.exec(msg.content);
     if (echo) {
       let circumfix = echo[1] ? "```" : "",
-      content = (echo[3] ? echo[4] : echo[4].trim()) || "/shrug";
+      content = (echo[3] ? echo[5] : echo[5].trim()) || "/shrug";
+      content = circumfix + content + circumfix;
+      if (echo[4]) content = {
+        embed: {
+          description: content,
+          color: colour
+        }
+      };
       ((echo[2] ? externalEchoChannel : null) || msg.channel)
-        .send(circumfix + content + circumfix);
+        .send(content);
     } else if (ofNotHave) {
       msg.channel.send(
         `<@${msg.author.id}> no it's` + "```"
         + msg.content.replace(ofNotHaveRegex, "$1 OF") + "```"
       );
+      sendOK = false;
       msg.react(thumbs_down);
     } else if (random) {
       let r,
@@ -205,8 +276,26 @@ client.on("message", msg => {
       prepareUser(msg.author.id);
       updateUserData(userData[msg.author.id].name = setName[1].trim());
       msg.channel.send(`hi, nice to meet you **${userData[msg.author.id].name}**`);
+    } else if (giveMoney) {
+      let given = giveMoney[1],
+      amount = +giveMoney[2];
+      prepareUser(given);
+      prepareUser(msg.author.id);
+      if (amount > 0 && amount <= userData[msg.author.id].money) {
+        updateUserData(userData[msg.author.id].money -= amount);
+        updateUserData(userData[given].money += amount);
+        updateUserData();
+        msg.channel.send(`**${userData[msg.author.id].name}** gave **\`${amount}\`** bitcoin but worse to **${userData[given].name}**`);
+      } else {
+        sendOK = false;
+        msg.channel.send(`sorry, can't work with that amount <@${msg.author.id}>`);
+        msg.react(thumbs_down);
+      }
+    } else {
+      sendOK = false;
     }
   }
+  if (sendOK) msg.react(ok);
 });
 
 function initPagination(msg, type) {
