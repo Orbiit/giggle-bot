@@ -1,10 +1,12 @@
 {
   "pickaxe": {
     "emoji": "⛏",
-    "price": 20
+    "price": 20,
+    "buyable": true
   },
   "[object Object]": {
     "emoji": "❓",
-    "price": 0
+    "price": 0,
+    "buyable": false
   }
 }

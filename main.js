@@ -22,7 +22,7 @@ const unselected = "⬛";
 const colour = 0x00BCD4;
 
 const maxItemsPerPage = 10;
-const latestUserVersion = 3;
+const latestUserVersion = 5;
 const day = 24 * 60 * 60 * 1000;
 
 const pageTypes = {
@@ -43,7 +43,7 @@ const pageTypes = {
   },
   market: {
     name: "market",
-    list: Object.keys(marketData),
+    list: Object.keys(marketData).filter(i => marketData[i].buyable),
     onselect(name, channel, setTitle, otherStuff) {
       let item = marketData[name];
       setTitle(item.emoji + " " + name);
@@ -53,6 +53,27 @@ const pageTypes = {
       };
       return `Price: **\`${item.price}\`** bitcoin but worse\n`
         + `\nHow many do you want to buy? (\`cancel\` to cancel)`;
+    }
+  },
+  profiles: {
+    name: "profile list",
+    get list() {
+      return Object.values(userData).map(u => u.name).filter(uname => uname !== "<@undefined>");
+    },
+    onselect(username, channel, setTitle) {
+      let userID;
+      for (userID in userData) if (userData[userID].name === username) break;
+      setTitle(`${username}'s profile`);
+      return `**BCBW account created**: ${new Date(userData[userID].joined).toString()}\n`
+        + `**BCBW**: ${userData[userID].money}\n`
+        + `**daily streak**: ${userData[userID].dailyStreak}\n`
+        + `\n__**Inventory**__\n`
+        + `coming soon (sorry i'm lazy)\n`
+        + `\n__**Stats**__\n`
+        + `times mined: ${userData[userID].stats.timesMined}\n`
+        + `GAME wins: ${userData[userID].stats.timesWonGame}\n`
+        + `GAME losses: ${userData[userID].stats.timesLostGame}\n`
+        + `GAME hint purchases: ${userData[userID].stats.hintPurchases}`
     }
   }
 };
@@ -91,12 +112,93 @@ const questionResponseResponders = {
         userData[msg.author.id].inventory[name] += quantity;
         updateUserData();
         msg.channel.send(`**${userData[msg.author.id].name}** thank you for your purchase.\n`
-          + `you bought ${quantity}x ${name} for \`${totalCost}\` bitcoin but worse`);
+          + `you bought ${marketData[name].emoji} x${quantity} (${name}) for \`${totalCost}\` bitcoin but worse`);
         msg.react(ok);
       }
     }
-    else if (msg.toLowerCase() === "cancel" || msg.toLowerCase() === "nvm") msg.react(ok);
+    else if (msg.content.toLowerCase() === "cancel" || msg.content.toLowerCase() === "nvm") msg.react(ok);
     else return false;
+    return true;
+  },
+  game(msg, args, questionAwait) {
+    if (args.purchaseHint) {
+      if (msg.content[0].toLowerCase() === "y") {
+        if (userData[msg.author.id].money < 50) {
+          msg.react(thumbs_down);
+          msg.channel.send(`${args.username}, not enough money!`);
+        } else {
+          args.hinted.push(args.purchaseHint);
+          userData[msg.author.id].money -= 50;
+          userData[msg.author.id].stats.hintPurchases++;
+          msg.channel.send(`${args.username}, purchased! :)`);
+          updateUserData();
+          msg.react(ok);
+        }
+      } else {
+        msg.channel.send(`${args.username}, canceled purchase! :)`);
+        msg.react(ok);
+      }
+      args.purchaseHint = false;
+    } else if (args.started) {
+      let hint = /\bhint *([0-9]+)\b/i.exec(msg.content);
+      if (hint) {
+        hint = +hint[1];
+        if (hint > args.word.length || hint < 1) {
+          msg.react(thumbs_down);
+          msg.channel.send(`${args.username}, the letter is out of range`);
+        } else if (~args.hinted.indexOf(hint)) {
+          msg.react(thumbs_down);
+          msg.channel.send(`${args.username}, i already gave you the hint!`);
+        } else {
+          msg.channel.send(`${args.username}, purchase letter #${hint} for **\`50\`** bitcoin but worse? (y/n)`);
+          args.purchaseHint = hint;
+        }
+      } else {
+        args.tries++;
+        if (~msg.content.toLowerCase().indexOf(args.word)) {
+          let reward = args.word.length * 53;
+          userData[msg.author.id].money += reward;
+          userData[msg.author.id].stats.timesWonGame++;
+          msg.channel.send(`${args.username} just won **\`${reward}\`** bitcoin but worse!`);
+          questionAwait.dontAutoKill = false;
+        } else if (msg.content.toLowerCase() === "cancel") {
+          msg.channel.send(`cancel game. hints and penalties were not refunded. the word was **${args.word}**`);
+          questionAwait.dontAutoKill = false;
+          args.tries--;
+        } else if (args.tries >= 5 || userData[msg.author.id].money < 50) {
+          userData[msg.author.id].stats.timesLostGame++;
+          msg.channel.send(`${args.username} lost. the word was **${args.word}**`);
+          questionAwait.dontAutoKill = false;
+        } else {
+          userData[msg.author.id].money -= 50;
+          msg.channel.send(`${args.username}, nope! **\`50\`** bitcoin but worse penalty!`);
+        }
+        updateUserData();
+      }
+    } else {
+      prepareUser(msg.author.id);
+      args.word = words[Math.floor(Math.random() * words.length)];
+      args.hinted = [];
+      args.started = true;
+      args.purchaseHint = false;
+      args.username = `**${userData[msg.author.id].name}**`;
+      args.tries = 0;
+      msg.react(ok);
+    }
+    let content = `**GAME** ${args.tries} out of 5 tries\nPlayer: <@${msg.author.id}>`
+      + "\nTens digit not displayed:```\n"
+      + args.word.split("").map((l, i) => !questionAwait.dontAutoKill || ~args.hinted.indexOf(i + 1) ? l : "_").join(" ")
+      + "\n" + args.word.split("").map((l, i) => (i + 1) % 10).join(" ")
+      + "```\nTo buy a hint: `hint [nth letter, 1-indexed]` (eg `hint 3` for the third letter)"
+      + "\n`cancel` to end game.";
+      // + "\nDEBUG:```" + `
+      // word:${args.word}
+      // hints:${JSON.stringify(args.hinted)}
+      // started:${args.started}
+      // purchasing hint:${args.purchaseHint}
+      // not stopping:${questionAwait.dontAutoKill}
+      // ` + "```";
+    args.msg.edit(content);
     return true;
   }
 };
@@ -124,6 +226,13 @@ function prepareUser(id) {
     case 2:
       userData[id].lastDaily = 0;
       userData[id].dailyStreak = 0;
+    case 3:
+      userData[id].stats.timesMined = 0;
+      userData[id].lastMine = 0;
+    case 4:
+      userData[id].stats.timesWonGame = 0;
+      userData[id].stats.timesLostGame = 0;
+      userData[id].stats.hintPurchases = 0;
   }
   userData[id].v = latestUserVersion;
   updateUserData();
@@ -146,60 +255,79 @@ client.on("ready", () => {
 });
 
 client.on("message", msg => {
-  if (msg.author.id === client.user.id) return;
-  if (questionAwaits[msg.author.id]) {
-    let invalid = questionResponseResponders[questionAwaits[msg.author.id].type](msg, questionAwaits[msg.author.id].args);
-    delete questionAwaits[msg.author.id];
-    if (!invalid) return;
+  let message = msg.content,
+  channel = msg.channel,
+  userID = msg.author.id;
+  if (userID === client.user.id) return;
+  if (questionAwaits[userID]) {
+    let valid = questionResponseResponders[questionAwaits[userID].type](msg, questionAwaits[userID].args, questionAwaits[userID]);
+    if (!questionAwaits[userID].dontAutoKill) delete questionAwaits[userID];
+    if (valid) return;
   }
   let sendOK = true;
-  if (/\b(hate|hated|hates|hating|hatred|hater|haters)\b/i.test(msg.content)) {
+  if (/\b(hate|hated|hates|hating|hatred|hater|haters)\b/i.test(message)) {
     let hat = {h: "l", H: "L", a: "o", A: "O", t: "v", T: "V"};
-    msg.channel.send(`hey hey hey <@${msg.author.id}> don't be so negative! try this:`
-      + "```" + msg.content.replace(
+    channel.send(`hey hey hey <@${userID}> don't be so negative! try this:`
+      + "```" + message.replace(
         /\b(hat)(e(s|d|rs?)?|ing)\b/gi,
         (m, c1, c2) => c1.split("").map(l => hat[l]).join("") + c2
       ).replace(/hatred/g, "love") + "```");
     sendOK = false;
     msg.react(thumbs_down);
-  } else if (msg.mentions.users.has(client.user.id) || /^moofy,? */.test(msg.content)) {
-    if (/\b(help|((your|ur) *)?commands?)\b/i.test(msg.content)) {
+  } else if (msg.mentions.users.has(client.user.id) || /^moofy,? */.test(message)) {
+    if (/\b(help|((your|ur) *)?commands?)\b/i.test(message)) {
       initPagination(msg, "commandList");
-    } else if (/\bwho\b/i.test(msg.content)) {
+    } else if (/\bwho\b/i.test(message)) {
       let content = [];
-      msg.channel.send({
+      channel.send({
         embed: {
           footer: {
             text: `VARIANT: ${botinfo.variant}`
           },
-          description: botinfo.description + "\n\n" + `My insides: ${botinfo.repo}`,
+          description: botinfo.description + `\n\nMy insides: ${botinfo.repo}\nSpam your server too: ${botinfo.invite}`,
           title: `ABOUT ${botinfo.name}`,
           color: colour,
           url: botinfo.repo
         }
       });
-    } else if (/\bhow *(r|are) *(u|you)\b/i.test(msg.content)) {
+    } else if (/\bhow *(r|are) *(u|you)\b/i.test(message)) {
       let feelings = ["good", "ok", "bad"],
       feeling = feelings[Math.floor(Math.random() * feelings.length)];
-      msg.channel.send(`i'm feeling ${feeling}. and you?`)
-      questionAwaits[msg.author.id] = {
+      channel.send(`i'm feeling ${feeling}. and you?`)
+      questionAwaits[userID] = {
         type: "howRU",
         args: feeling
       };
-    } else if (/\bmarket\b/i.test(msg.content)) {
+    } else if (/\bmarket\b/i.test(message)) {
       initPagination(msg, "market");
+    } else if (/\bGAME\b/.test(message)) {
+      channel.send("loading...").then(msg => {
+        msg.edit("say anything to start");
+        questionAwaits[userID] = {
+          type: "game",
+          args: {
+            msg: msg,
+            started: false
+          },
+          dontAutoKill: true
+        };
+      });
+    } else if (/\bGAME\b/i.test(message)) {
+      channel.send(`NOT LOUD ENOUGH <@${userID}>`);
+    } else if (/\bprofiles?\b/i.test(message)) {
+      initPagination(msg, "profiles");
     } else {
-      let deleteRegex = /\bdelete *([0-9]+)\b/i.exec(msg.content),
-      react = /\breact *(\S{1,2})/i.exec(msg.content);
+      let deleteRegex = /\bdelete *([0-9]+)\b/i.exec(message),
+      react = /\breact *(\S{1,2})/i.exec(message);
       if (deleteRegex) {
         if (Math.floor(Math.random() * 4)) {
-          msg.channel.send(`<@${msg.author.id}> nahhh`);
+          channel.send(`<@${userID}> nahhh`);
           sendOK = false;
           msg.react(thumbs_down);
         } else {
-          msg.channel.fetchMessages({limit: +deleteRegex[1]}).then(msgs => {
+          channel.fetchMessages({limit: +deleteRegex[1]}).then(msgs => {
             msgs.map(msg => {
-              if (msg.author.id === client.user.id) msg.delete();
+              if (userID === client.user.id) msg.delete();
             });
           });
         }
@@ -210,23 +338,23 @@ client.on("message", msg => {
             throw new Error("don't dare you try to manipulate votes!");
           reactTarget.react(react[1]);
         } catch (e) {
-          msg.channel.send(`<@${msg.author.id}> **\`\`\`${e.toString().toUpperCase()}\`\`\`**`);
+          channel.send(`<@${userID}> **\`\`\`${e.toString().toUpperCase()}\`\`\`**`);
           sendOK = false;
         }
       } else {
-        msg.channel.send(`<@${msg.author.id}> DON'T MENTION ME YET`);
+        channel.send(`<@${userID}> DON'T MENTION ME YET`);
         sendOK = false;
       }
     }
-  } else if (/\bpag(e|ination) *test\b/i.test(msg.content)) {
+  } else if (/\bpag(e|ination) *test\b/i.test(message)) {
     initPagination(msg, "speller");
-  } else if (/\buse *this *channel\b/i.test(msg.content)) {
-    externalEchoChannel = msg.channel;
-  } else if (/\bdumb\b/i.test(msg.content) && /\bbot\b/i.test(msg.content)) {
-    msg.channel.send(`DID I JUST HEAR "dumb" AND "bot" USED TOGETHER??!!??!11!?1/!?`);
+  } else if (/\buse *this *channel\b/i.test(message)) {
+    externalEchoChannel = channel;
+  } else if (/\bdumb\b/i.test(message) && /\bbot\b/i.test(message)) {
+    channel.send(`DID I JUST HEAR "dumb" AND "bot" USED TOGETHER??!!??!11!?1/!?`);
     sendOK = false;
     msg.react(thumbs_down);
-  } else if (/\binspect *emoji\b/i.test(msg.content)) {
+  } else if (/\binspect *emoji\b/i.test(message)) {
     let embed = new Discord.RichEmbed({
       footer: {
         text: `react to set emoji`
@@ -235,7 +363,7 @@ client.on("message", msg => {
       title: "emoji inspector",
       color: colour
     });
-    msg.channel.send({
+    channel.send({
       embed: embed
     }).then(msg => {
       emojiInfos[msg.id] = {
@@ -243,42 +371,68 @@ client.on("message", msg => {
         msg: msg
       };
     });
-  } else if (/\bkeepInventory\b/i.test(msg.content) && msg.author.username === "Gamepro5") {
-    msg.channel.send(`<@${msg.author.id}>` + " make sure you set `keepInventory` to `false` :)");
+  } else if (/\bkeepInventory\b/i.test(message) && msg.author.username === "Gamepro5") {
+    channel.send(`<@${userID}>` + " make sure you set `keepInventory` to `false` :)");
     sendOK = false;
     msg.react(thumbs_down);
-  } else if (/\bmy *daily\b/i.test(msg.content)) {
-    prepareUser(msg.author.id);
+  } else if (/\bmy *daily\b/i.test(message)) {
+    prepareUser(userID);
     let now = Date.now(),
-    timeSince = now - userData[msg.author.id].lastDaily,
+    timeSince = now - userData[userID].lastDaily,
     addendum = "";
     if (timeSince >= day) {
-      userData[msg.author.id].money += 500;
-      if (timeSince > day * 2 && userData[msg.author.id].lastDaily > 0) {
-        addendum = `\nrip, you lost your ${userData[msg.author.id].dailyStreak}-day streak`
-        userData[msg.author.id].dailyStreak = 0;
+      userData[userID].money += 500;
+      if (timeSince > day * 2 && userData[userID].lastDaily > 0) {
+        addendum = `\nrip, you lost your ${userData[userID].dailyStreak}-day streak`
+        userData[userID].dailyStreak = 0;
       }
-      userData[msg.author.id].lastDaily = now;
-      userData[msg.author.id].dailyStreak++;
+      userData[userID].lastDaily = now;
+      userData[userID].dailyStreak++;
       updateUserData();
-      msg.channel.send(`<@${msg.author.id}> good job! here's **\`500\`** bitcoin but worse for you :D\n`
-        + `(${userData[msg.author.id].dailyStreak}-day streak!)` + addendum);
+      channel.send(`<@${userID}> good job! here's **\`500\`** bitcoin but worse for you :D\n`
+        + `(${userData[userID].dailyStreak}-day streak!)` + addendum);
     } else {
-      let lastDaily = new Date(userData[msg.author.id].lastDaily);
-      msg.channel.send(`<@${msg.author.id}> be patient! you last got your daily at `
+      let lastDaily = new Date(userData[userID].lastDaily);
+      channel.send(`<@${userID}> be patient! you last got your daily at `
         + `${(lastDaily.getHours() + 11) % 12 + 1}:${("0" + lastDaily.getMinutes()).slice(-2)} ${lastDaily.getHours() < 12 ? "a" : "p"}m`);
       sendOK = false;
       msg.react(thumbs_down);
     }
+  } else if (/\bi *want *to *mine\b/i.test(message)) {
+    prepareUser(userID);
+    if (userData[userID].inventory.pickaxe >= 1) {
+      let now = Date.now();
+      if (now - userData[userID].lastMine < 600000) {
+        sendOK = false;
+        channel.send(`you're still tired from your last mining session, **${userData[userID].name}**`);
+      } else {
+        let brokenPickaxe = Math.floor(Math.random() * 3) === 0,
+        amount = Math.floor(Math.random() ** 6 * 1000 + 50);
+        if (brokenPickaxe) {
+          amount = Math.ceil(amount * (1 - Math.random()));
+          userData[userID].inventory.pickaxe--;
+        }
+        userData[userID].money += amount;
+        userData[userID].stats.timesMined++;
+        userData[userID].lastMine = now;
+        updateUserData();
+        channel.send(`**${userData[userID].name}** just mined **\`${amount}\`** bitcoin but worse!`
+          + (brokenPickaxe ? `\nyour pickaxe broke :(` : ""));
+      }
+    } else {
+      channel.send(`**${userData[userID].name}**, you don't have a pickaxe`);
+      sendOK = false;
+      msg.react(thumbs_down);
+    }
   } else {
-    let echo = /echo(c?)(x?)(s?)(e?):([^]+)/im.exec(msg.content),
+    let echo = /echo(c?)(x?)(s?)(e?):([^]+)/im.exec(message),
     ofNotHaveRegex = /\b(could|might|should|will|would)(?:'?ve| +have)\b/gi,
-    ofNotHave = ofNotHaveRegex.exec(msg.content),
-    random = /\b(actually *)?(?:pick *)?(?:a *)?rand(?:om)? *num(?:ber)? *(?:d'|from|between)? *([0-9]+) *(?:-|to|t'|&|and|n')? *([0-9]+)/i.exec(msg.content),
-    getMoney = /(\bmy|<@!?([0-9]+)>(?:'?s)?) *(?:money|bcbw)/i.exec(msg.content),
-    setName = /\bmy *name *(?:'s|is) +(.+)/i.exec(msg.content),
-    giveMoney = /\bgive *<@!?([0-9]+)> *([0-9]+) *(?:money|bcbw)\b/i.exec(msg.content),
-    getInventory = /(\bmy|<@!?([0-9]+)>(?:'?s)?) *inv(?:entory)?/i.exec(msg.content);
+    ofNotHave = ofNotHaveRegex.exec(message),
+    random = /\b(actually *)?(?:pick *)?(?:a *)?rand(?:om)? *num(?:ber)? *(?:d'|from|between)? *([0-9]+) *(?:-|to|t'|&|and|n')? *([0-9]+)/i.exec(message),
+    getMoney = /(\bmy|<@!?([0-9]+)>(?: *'?s)?) *(?:money|bcbw)/i.exec(message),
+    setName = /\bmy *name *(?:'s|is) +(.+)/i.exec(message),
+    giveMoney = /\bgive *<@!?([0-9]+)> *([0-9]+) *(?:money|bcbw)\b/i.exec(message),
+    getInventory = /(\bmy|<@!?([0-9]+)>(?: *'?s)?) *inv(?:entory)?/i.exec(message);
     if (echo) {
       let circumfix = echo[1] ? "```" : "",
       content = (echo[3] ? echo[5] : echo[5].trim()) || "/shrug";
@@ -289,12 +443,12 @@ client.on("message", msg => {
           color: colour
         }
       };
-      ((echo[2] ? externalEchoChannel : null) || msg.channel)
+      ((echo[2] ? externalEchoChannel : null) || channel)
         .send(content);
     } else if (ofNotHave) {
-      msg.channel.send(
-        `<@${msg.author.id}> no it's` + "```"
-        + msg.content.replace(ofNotHaveRegex, "$1 OF") + "```"
+      channel.send(
+        `<@${userID}> no it's` + "```"
+        + message.replace(ofNotHaveRegex, "$1 OF") + "```"
       );
       sendOK = false;
       msg.react(thumbs_down);
@@ -312,38 +466,45 @@ client.on("message", msg => {
         }
         r = +r.slice(0, -1) + min;
       }
-      msg.channel.send(`<@${msg.author.id}> hmmm... I choose... **${r}**!`);
+      channel.send(`<@${userID}> hmmm... I choose... **${r}**!`);
     } else if (getMoney) {
-      let user = getMoney[1] === "my" ? msg.author.id : getMoney[2];
+      let user = getMoney[1].toLowerCase() === "my" ? userID : getMoney[2];
       prepareUser(user);
-      msg.channel.send(`**${userData[user].name}** has **\`${userData[user].money}\`** bitcoin but worse`);
+      channel.send(`**${userData[user].name}** has **\`${userData[user].money}\`** bitcoin but worse`);
     } else if (setName) {
-      prepareUser(msg.author.id);
-      updateUserData(userData[msg.author.id].name = setName[1].trim());
-      msg.channel.send(`hi, nice to meet you **${userData[msg.author.id].name}**`);
+      if (~setName[1].indexOf("@")) {
+        sendOK = false;
+        msg.react(thumbs_down);
+        channel.send(`i have been instructed to disallow the usage of @ in names, sorry!`);
+      } else {
+        prepareUser(userID);
+        updateUserData(userData[userID].name = setName[1].trim());
+        channel.send(`hi, nice to meet you **${userData[userID].name}**`);
+      }
     } else if (giveMoney) {
       let given = giveMoney[1],
       amount = +giveMoney[2];
       prepareUser(given);
-      prepareUser(msg.author.id);
-      if (amount > 0 && amount <= userData[msg.author.id].money) {
-        updateUserData(userData[msg.author.id].money -= amount);
+      prepareUser(userID);
+      if (amount > 0 && amount <= userData[userID].money) {
+        updateUserData(userData[userID].money -= amount);
         updateUserData(userData[given].money += amount);
         updateUserData();
-        msg.channel.send(`**${userData[msg.author.id].name}** gave **\`${amount}\`** bitcoin but worse to **${userData[given].name}**`);
+        channel.send(`**${userData[userID].name}** gave **\`${amount}\`** bitcoin but worse to **${userData[given].name}**`);
       } else {
         sendOK = false;
-        msg.channel.send(`sorry, can't work with that amount <@${msg.author.id}>`);
+        channel.send(`sorry, can't work with that amount <@${userID}>`);
         msg.react(thumbs_down);
       }
     } else if (getInventory) {
-      let user = getInventory[1] === "my" ? msg.author.id : getInventory[2];
+      let user = getInventory[1].toLowerCase() === "my" ? userID : getInventory[2];
       prepareUser(user);
       let content = "";
       for (let item in userData[user].inventory) {
-        content += `\n${marketData[item].emoji} x${userData[user].inventory[item]}`;
+        if (userData[user].inventory[item] === 0) continue;
+        content += `\n${marketData[item].emoji} x${userData[user].inventory[item]} (${item})`;
       }
-      msg.channel.send(`**${userData[user].name}** has:${content || "\n\n...nothing! :("}`);
+      channel.send(`**${userData[user].name}** has:${content || "\n\n...nothing! :("}`);
     } else {
       sendOK = false;
     }

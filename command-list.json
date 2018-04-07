@@ -19,5 +19,8 @@
   "moofy market": "opens the market",
   "my inventory": "shows you your inventory's contents",
   "@person's inventory": "shows you the given person's inventory's contents",
-  "my daily": "get your daily `500` bitcoin but worse (BCBW)"
+  "my daily": "get your daily `500` bitcoin but worse (BCBW)",
+  "I want to mine": "makes you mine and earn some bitcoin but worse (BCBW). requires a pickaxe. we cannot guarantee the survival of the pickaxe",
+  "@moofy-bot GAME": "starts a game with moofy-bot that can earn you some bitcoin but worse (BCBW)\n\n`hint 3` allows you to buy the third letter\n`cancel` cancels the game",
+  "@moofy-bot profiles": "lists profiles that have a bitcoin but worse (BCBW) account"
 }
