@@ -22,7 +22,6 @@ const unselected = "⬛";
 const colour = 0x00BCD4;
 
 const maxItemsPerPage = 10;
-const latestUserVersion = 5;
 const day = 24 * 60 * 60 * 1000;
 
 const pageTypes = {
@@ -211,8 +210,9 @@ emojiInfos = {},
 scheduledUserDataUpdate = null,
 questionAwaits = {};
 
-Object.keys(userData).map(id => userData[id].v < latestUserVersion ? prepareUser(id) : 0);
+const latestUserVersion = 14;
 function prepareUser(id) {
+  if (typeof id !== "string") id = id.toString();
   if (!userData[id]) userData[id] = {v: 0};
   if (userData[id].v === latestUserVersion) return;
   switch (userData[id].v) {
@@ -233,6 +233,18 @@ function prepareUser(id) {
       userData[id].stats.timesWonGame = 0;
       userData[id].stats.timesLostGame = 0;
       userData[id].stats.hintPurchases = 0;
+    // me trying to figure out fetchUser:
+    case 5: case 6: case 7: case 8: case 9: case 10: case 11: case 12: case 13:
+      if (userData[id].name && ~userData[id].name.indexOf("@")) {
+        let mentionRegex = /<@!?([0-9]+)>/.exec(userData[id].name);
+        if (mentionRegex) {
+          client.fetchUser(mentionRegex[1]).then(user => {
+            userData[id].name = user.username;
+          });
+        } else {
+          userData[id].name = userData[id].name.replace(/@/g, "[at]");
+        }
+      }
   }
   userData[id].v = latestUserVersion;
   updateUserData();
@@ -252,6 +264,7 @@ function updateUserData() {
 
 client.on("ready", () => {
   console.log(`Logged in as ${client.user.tag}!`);
+  Object.keys(userData).map(id => userData[id].v < latestUserVersion ? prepareUser(id) : 0);
 });
 
 client.on("message", msg => {
@@ -265,6 +278,7 @@ client.on("message", msg => {
     if (valid) return;
   }
   let sendOK = true;
+  prepareUser(userID);
   if (/\b(hate|hated|hates|hating|hatred|hater|haters)\b/i.test(message)) {
     let hat = {h: "l", H: "L", a: "o", A: "O", t: "v", T: "V"};
     channel.send(`hey hey hey <@${userID}> don't be so negative! try this:`
@@ -316,6 +330,18 @@ client.on("message", msg => {
       channel.send(`NOT LOUD ENOUGH <@${userID}>`);
     } else if (/\bprofiles?\b/i.test(message)) {
       initPagination(msg, "profiles");
+    } else if (/\bleader(?:board)?\b/i.test(message)) {
+      let peopleMoney = Object.values(userData).filter(u => u.money > 0)
+        .sort((a, b) => b.money - a.money),
+      digitLengths = peopleMoney[0].money.toString().length,
+      spaces = " ".repeat(digitLengths);
+      channel.send({
+        embed: {
+          color: colour,
+          title: "people with the most bitcoin but worse",
+          description: peopleMoney.map(u => `\`+${(spaces + u.money).slice(-digitLengths)}\` **${u.name}**`).join("\n")
+        }
+      });
     } else {
       let deleteRegex = /\bdelete *([0-9]+)\b/i.exec(message),
       react = /\breact *(\S{1,2})/i.exec(message);
@@ -376,7 +402,6 @@ client.on("message", msg => {
     sendOK = false;
     msg.react(thumbs_down);
   } else if (/\bmy *daily\b/i.test(message)) {
-    prepareUser(userID);
     let now = Date.now(),
     timeSince = now - userData[userID].lastDaily,
     addendum = "";
@@ -399,7 +424,6 @@ client.on("message", msg => {
       msg.react(thumbs_down);
     }
   } else if (/\bi *want *to *mine\b/i.test(message)) {
-    prepareUser(userID);
     if (userData[userID].inventory.pickaxe >= 1) {
       let now = Date.now();
       if (now - userData[userID].lastMine < 600000) {
@@ -477,7 +501,6 @@ client.on("message", msg => {
         msg.react(thumbs_down);
         channel.send(`i have been instructed to disallow the usage of @ in names, sorry!`);
       } else {
-        prepareUser(userID);
         updateUserData(userData[userID].name = setName[1].trim());
         channel.send(`hi, nice to meet you **${userData[userID].name}**`);
       }
@@ -485,7 +508,6 @@ client.on("message", msg => {
       let given = giveMoney[1],
       amount = +giveMoney[2];
       prepareUser(given);
-      prepareUser(userID);
       if (amount > 0 && amount <= userData[userID].money) {
         updateUserData(userData[userID].money -= amount);
         updateUserData(userData[given].money += amount);
