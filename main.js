@@ -19,10 +19,13 @@ const down = "🔽";
 const tree = "🌳";
 const selected = "▶";
 const unselected = "⬛";
+const DemoCoinVerification = "🤔";
 const colour = 0x00BCD4;
 
 const maxItemsPerPage = 10;
 const day = 24 * 60 * 60 * 1000;
+const DemoCoinID = "432014777724698625";
+const BCBWperDemoCoin = 1000;
 
 const pageTypes = {
   speller: {
@@ -50,7 +53,7 @@ const pageTypes = {
         type: "marketBuy",
         args: name
       };
-      return `Price: **\`${item.price}\`** bitcoin but worse\n`
+      return `${item.description}\n\nPrice: **\`${item.price}\`** bitcoin but worse`
         + `\nHow many do you want to buy? (\`cancel\` to cancel)`;
     }
   },
@@ -208,7 +211,8 @@ externalEchoChannel = null,
 reactTarget = null,
 emojiInfos = {},
 scheduledUserDataUpdate = null,
-questionAwaits = {};
+questionAwaits = {},
+exchanges = {};
 
 const latestUserVersion = 14;
 function prepareUser(id) {
@@ -288,7 +292,7 @@ client.on("message", msg => {
       ).replace(/hatred/g, "love") + "```");
     sendOK = false;
     msg.react(thumbs_down);
-  } else if (msg.mentions.users.has(client.user.id) || /^moofy,? */.test(message)) {
+  } else if (msg.mentions.users.has(client.user.id) || /^moofy,? */i.test(message)) {
     if (/\b(help|((your|ur) *)?commands?)\b/i.test(message)) {
       initPagination(msg, "commandList");
     } else if (/\bwho\b/i.test(message)) {
@@ -448,6 +452,33 @@ client.on("message", msg => {
       sendOK = false;
       msg.react(thumbs_down);
     }
+  } else if (userID === DemoCoinID) {
+    if (msg.embeds[0]) {
+      let embed = msg.embeds[0],
+      command = embed.title.trim().split(/\s+/);
+      if (command[0] === "convert") {
+        try {
+          let amount = +command[1],
+          user = /<@!?([0-9]+)>/.exec(embed.description)[1];
+          prepareUser(user);
+          if (isNaN(amount) || amount < 0)
+            throw new Error("i don't like that \"positive number\" you have there");
+          else {
+            msg.react(ok);
+            userData[user].money += Math.floor(amount * BCBWperDemoCoin);
+            updateUserData();
+          }
+        } catch (e) {
+          channel.send("```" + e.toString() + "```");
+          sendOK = false;
+          msg.react(thumbs_down);
+        }
+      } else {
+        sendOK = false;
+      }
+    } else {
+      sendOK = false;
+    }
   } else {
     let echo = /echo(c?)(x?)(s?)(e?):([^]+)/im.exec(message),
     ofNotHaveRegex = /\b(could|might|should|will|would)(?:'?ve| +have)\b/gi,
@@ -456,7 +487,8 @@ client.on("message", msg => {
     getMoney = /(\bmy|<@!?([0-9]+)>(?: *'?s)?) *(?:money|bcbw)/i.exec(message),
     setName = /\bmy *name *(?:'s|is) +(.+)/i.exec(message),
     giveMoney = /\bgive *<@!?([0-9]+)> *([0-9]+) *(?:money|bcbw)\b/i.exec(message),
-    getInventory = /(\bmy|<@!?([0-9]+)>(?: *'?s)?) *inv(?:entory)?/i.exec(message);
+    getInventory = /(\bmy|<@!?([0-9]+)>(?: *'?s)?) *inv(?:entory)?/i.exec(message),
+    convertMoney = /\b(?:exchange|convert) *([0-9]+) *bcbw *(?:to|2) *([a-z]+)\b/i.exec(message);
     if (echo) {
       let circumfix = echo[1] ? "```" : "",
       content = (echo[3] ? echo[5] : echo[5].trim()) || "/shrug";
@@ -527,6 +559,33 @@ client.on("message", msg => {
         content += `\n${marketData[item].emoji} x${userData[user].inventory[item]} (${item})`;
       }
       channel.send(`**${userData[user].name}** has:${content || "\n\n...nothing! :("}`);
+    } else if (convertMoney) {
+      let amount = +convertMoney[1],
+      currency = convertMoney[2].toLowerCase();
+      if (userData[userID].money < amount) {
+        sendOK = false;
+        msg.react(thumbs_down);
+        channel.send(`that's not a currency i can convert to, **${userData[userID].name}**`);
+      } else switch (currency) {
+        case "democoin":
+        case "dc":
+          channel.send({
+            embed: {
+              title: `convert ${amount / BCBWperDemoCoin}`,
+              description: `<@${userID}>`
+            }
+          }).then(msg => {
+            exchanges[msg.id] = () => {
+              userData[userID].money -= amount;
+              updateUserData();
+            };
+          });
+          break;
+        default:
+          sendOK = false;
+          msg.react(thumbs_down);
+          channel.send(`that's not a currency i can convert to, **${userData[userID].name}**`);
+      }
     } else {
       sendOK = false;
     }
@@ -641,6 +700,11 @@ client.on("messageReactionAdd", (reaction, user) => {
     emojiInfos[id].embed.setFooter("selected");
     emojiInfos[id].msg.edit(emojiInfos[id].embed);
     delete emojiInfos[id];
+  } else if (exchanges[id]) {
+    if (user.id === DemoCoinID && reaction.emoji.name === DemoCoinVerification) {
+      exchanges[id]();
+      delete exchanges[id];
+    }
   } else if (reaction.emoji.name === tree) {
     reactTarget = reaction.message;
   } else if (~paginations.indexOf(id) && messageReactionUpdate(reaction.emoji.name, id, user));

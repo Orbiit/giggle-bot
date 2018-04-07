@@ -2,11 +2,19 @@
   "pickaxe": {
     "emoji": "⛏",
     "price": 20,
-    "buyable": true
+    "buyable": true,
+    "description": "A stereotypical pickaxe made of steel. Useful for mining bitcoin but worse, but unfortunately because no one holds it correctly, it often breaks."
   },
   "[object Object]": {
     "emoji": "❓",
     "price": 0,
-    "buyable": false
+    "buyable": false,
+    "description": "dummy item to prevent killing moofy :("
+  },
+  "wooden potato": {
+    "emoji": "🥔",
+    "price": 10000,
+    "buyable": true,
+    "description": "An inedible potato made of wood. This potato was discovered on a farm in Idaho and is rumoured to have mysterious electrical properties. The farmers originally used the potato as an insulator in electrical circuits, but now it is used as a modern device for getting a child (or adult) sick through unsupervised consumption."
   }
 }
