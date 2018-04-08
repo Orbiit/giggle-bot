@@ -1,5 +1,5 @@
 {
-  "@moofy-bot your commands": "opens this\n\nmention + `help`/`(your|ur) commands`",
+  "@moofy-bot your commands": "opens this\n\nmention + `help`/`(your|ur)commands`/`commandformat`",
   "who's @moofy-bot": "opens the about thingy\n\nmention + `who`",
   "hate": "trigger the bot\n\n`[hate|hated|hates|hating|hatred|hater|haters]`",
   "pagination test": "a pagination test; the demo lets you select a word for it to spell out. this was the first command made for variant `giggle-bot`\n\n`pag[e|ination]test`",
@@ -23,6 +23,6 @@
   "I want to mine": "makes you mine and earn some bitcoin but worse (BCBW). requires a pickaxe. we cannot guarantee the survival of the pickaxe\n\n`iwanttomine`",
   "@moofy-bot GAME": "starts a game with moofy-bot that can earn you some bitcoin but worse (BCBW)\n\n`hint 3` allows you to buy the third letter\n`cancel` cancels the game\n\nmention + `GAME` (it must be in all caps)",
   "@moofy-bot profiles": "lists profiles that have a bitcoin but worse (BCBW) account\n\nmention + `profile(s)`",
-  "@moofy-bot leaderboard": "lists the people with the most bitcoin but worse (BCBW)",
-  "exchange 1000 bcbw to democoin": "converts the given amount of bitcoin but worse (BCBW) to DemoCoin"
+  "@moofy-bot leaderboard": "lists the people with the most bitcoin but worse (BCBW)\n\nmention + `leader(board)`",
+  "exchange 1000 bcbw to democoin": "converts the given amount of bitcoin but worse (BCBW) to DemoCoin\n\n`[exchange|convert][<nonnegative integer>][to|2][democoin|dc]`"
 }
