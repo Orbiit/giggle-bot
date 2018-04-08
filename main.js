@@ -27,7 +27,8 @@ const maxItemsPerPage = 10;
 const day = 24 * 60 * 60 * 1000;
 const DemoCoinID = "432014777724698625";
 const BCBWperDemoCoin = 1000;
-const robRate = 2; // BCBW per second
+const robRate = 10; // BCBW per second
+const withdrawFee = 0.05;
 
 const pageTypes = {
   speller: {
@@ -144,7 +145,7 @@ const questionResponseResponders = {
       }
       args.purchaseHint = false;
     } else if (args.started) {
-      let hint = /\bhint *([0-9]+)\b/i.exec(msg.content);
+      let hint = /^hint *([0-9]+)\b/i.exec(msg.content);
       if (hint) {
         hint = +hint[1];
         if (hint > args.word.length || hint < 1) {
@@ -247,7 +248,7 @@ questionAwaits = {},
 exchanges = {},
 scheduledRobStateUpdate = null;
 
-const latestUserVersion = 16;
+const latestUserVersion = 17;
 function prepareUser(id) {
   if (typeof id !== "string") id = id.toString();
   if (!userData[id]) userData[id] = {v: 0};
@@ -270,7 +271,7 @@ function prepareUser(id) {
       userData[id].stats.timesWonGame = 0;
       userData[id].stats.timesLostGame = 0;
       userData[id].stats.hintPurchases = 0;
-    // me trying to figure out fetchUser:
+    // me trying to figure out fetchUser before I found out the problem wasn't here
     case 5: case 6: case 7: case 8: case 9: case 10: case 11: case 12: case 13:
       if (userData[id].name && ~userData[id].name.indexOf("@")) {
         let mentionRegex = /<@!?([0-9]+)>/.exec(userData[id].name);
@@ -293,6 +294,8 @@ function prepareUser(id) {
       userData[id].stats.coffeeConsumed = 0;
       if (userData[id].stats.moneyLostFromRobbing < 0)
         userData[id].stats.moneyLostFromRobbing *= -1;
+    case 16:
+      userData[id].bankMoney = 0;
   }
   userData[id].v = latestUserVersion;
   updateUserData();
@@ -344,7 +347,28 @@ client.on("message", msg => {
     sendOK = false;
     msg.react(thumbs_down);
   } else if (msg.mentions.users.has(client.user.id) || /^moofy,? */i.test(message)) {
-    if (/\b(help|((your|ur) *)?commands?|command *format)\b/i.test(message)) {
+    let moreInfo = /\btell *me *more *about *([a-z]+)(?: *#?([0-9]+))?/i.exec(message);
+    if (moreInfo) {
+      let query = moreInfo[1].trim().toLowerCase(),
+      resultIndex = +moreInfo[2] || 1,
+      results = Object.keys(commands).filter(c => ~c.toLowerCase().indexOf(query));
+      if (results.length === 0) {
+        channel.send(`couldn't find the command you were looking for (try \`@moofy-bot your commands\` for the full list)`);
+        sendOK = false;
+        msg.react(thumbs_down);
+      } else {
+        if (resultIndex > results.length) resultIndex = results.length;
+        let command = results[resultIndex - 1];
+        channel.send({
+          embed: {
+            title: `**\`${command}\`**`,
+            description: commands[command].replace(/TREE/g, tree)
+              + `\n\nOther results (use \`@moofy-bot tell me more about ${query} #n\`):\n`
+              + results.map((c, i) => `${i + 1}. \`${c}\``).join("\n")
+          }
+        });
+      }
+    } else if (/\b(help|((your|ur) *)?commands?|command *format)\b/i.test(message)) {
       initPagination(msg, "commandList");
     } else if (/\bwho\b/i.test(message)) {
       let content = [];
@@ -401,12 +425,17 @@ client.on("message", msg => {
       let deleteRegex = /\bdelete *([0-9]+)\b/i.exec(message),
       react = /\breact *(\S{1,2})/i.exec(message);
       if (deleteRegex) {
-        if (Math.floor(Math.random() * 4)) {
+        let amount = +deleteRegex[1];
+        if (amount > 100) {
+          channel.send(`<@${userID}> due to technical limitations i can't delete more than 100`);
+          sendOK = false;
+          msg.react(thumbs_down);
+        } else if (Math.floor(Math.random() * 4)) {
           channel.send(`<@${userID}> nahhh`);
           sendOK = false;
           msg.react(thumbs_down);
         } else {
-          channel.fetchMessages({limit: +deleteRegex[1]}).then(msgs => {
+          channel.fetchMessages({limit: amount}).then(msgs => {
             msgs.map(msg => {
               if (msg.author.id === client.user.id) {
                 msg.delete();
@@ -428,19 +457,19 @@ client.on("message", msg => {
           sendOK = false;
         }
       } else {
-        channel.send(`<@${userID}> DON'T MENTION ME YET`);
+        channel.send(`<@${userID}> DON'T MENTION ME`);
         sendOK = false;
       }
     }
-  } else if (/\bpag(e|ination) *test\b/i.test(message)) {
+  } else if (/^pag(e|ination) *test\b/i.test(message)) {
     initPagination(msg, "speller");
-  } else if (/\buse *this *channel\b/i.test(message)) {
+  } else if (/^use *this *channel\b/i.test(message)) {
     externalEchoChannel = channel;
   } else if (/\bdumb\b/i.test(message) && /\bbot\b/i.test(message)) {
     channel.send(`DID I JUST HEAR "dumb" AND "bot" USED TOGETHER??!!??!11!?1/!?`);
     sendOK = false;
     msg.react(thumbs_down);
-  } else if (/\binspect *emoji\b/i.test(message)) {
+  } else if (/^inspect *emoji\b/i.test(message)) {
     let embed = new Discord.RichEmbed({
       footer: {
         text: `react to set emoji`
@@ -461,7 +490,7 @@ client.on("message", msg => {
     channel.send(`<@${userID}>` + " make sure you set `keepInventory` to `false` :)");
     sendOK = false;
     msg.react(thumbs_down);
-  } else if (/\bmy *daily\b/i.test(message)) {
+  } else if (/^my *daily\b/i.test(message)) {
     let now = Date.now(),
     timeSince = now - userData[userID].lastDaily,
     addendum = "";
@@ -483,7 +512,7 @@ client.on("message", msg => {
       sendOK = false;
       msg.react(thumbs_down);
     }
-  } else if (/\bi *want *to *mine\b/i.test(message)) {
+  } else if (/^i *want *to *mine\b/i.test(message)) {
     if (userData[userID].inventory.pickaxe >= 1) {
       let now = Date.now();
       if (now - userData[userID].lastMine < 600000) {
@@ -535,7 +564,7 @@ client.on("message", msg => {
     } else {
       sendOK = false;
     }
-  } else if (/\bHEY\b/.test(message)) {
+  } else if (/^HEY\b/.test(message)) {
     if (Object.keys(robberies).length > 0) {
       Object.keys(robberies).map(r => {
         let fine = userData[r] > 12000 ? 4000 : Math.floor(userData[r].money / 3);
@@ -559,18 +588,25 @@ client.on("message", msg => {
       sendOK = false;
       msg.react(thumbs_down);
     }
+  } else if (/^my *bank *acc(?:ount)?\b/i.test(message)) {
+    channel.send(`you have **\`${userData[userID].bankMoney}\`** bitcoin but worse protected by MOOFY BANK SERVICES`);
+  } else if (/^my *progress\b/i.test(message)) {
+    channel.send(`you aren't robbing right now. robbers: `
+      + (Object.keys(robberies).map(id => `**${(userData[id] || {}).name}**`).join(", ") || "none"));
   } else {
-    let echo = /\becho(c?)(x?)(s?)(e?):([^]+)/im.exec(message),
+    let echo = /^echo(c?)(x?)(s?)(e?):([^]+)/im.exec(message),
     ofNotHaveRegex = /\b(could|might|should|will|would)(?:'?ve| +have)\b/gi,
     ofNotHave = ofNotHaveRegex.exec(message),
-    random = /\b(actually *)?(?:pick *)?(?:a *)?rand(?:om)? *num(?:ber)? *(?:d'|from|between)? *([0-9]+) *(?:-|to|t'|&|and|n')? *([0-9]+)/i.exec(message),
-    getMoney = /(\bmy|<@!?([0-9]+)>(?: *'?s)?) *(?:money|bcbw)\b/i.exec(message),
-    setName = /\bmy *name *(?:'s|is) +(.+)/i.exec(message),
-    giveMoney = /\bgive *<@!?([0-9]+)> *([0-9]+) *(?:money|bcbw)\b/i.exec(message),
-    getInventory = /(\bmy|<@!?([0-9]+)>(?: *'?s)?) *inv(?:entory)?\b/i.exec(message),
-    convertMoney = /\b(?:exchange|convert) *([0-9]+) *bcbw *(?:to|2) *([a-z]+)\b/i.exec(message),
-    rob = /\b(?:rob|steal) *(?:from|d')? *<@!?([0-9]+)>/i.exec(message),
-    consume = /\b(?:consume|eat|drink) *(\S{1,2})/i.exec(message);
+    random = /^(actually *)?(?:pick *)?(?:a *)?rand(?:om)? *num(?:ber)? *(?:d'|from|between)? *([0-9]+) *(?:-|to|t'|&|and|n')? *([0-9]+)/i.exec(message),
+    getMoney = /^(my|<@!?([0-9]+)>(?: *'?s)?) *(?:money|bcbw)\b/i.exec(message),
+    setName = /^my *name *(?:'s|is) +(.+)/i.exec(message),
+    giveMoney = /^give *<@!?([0-9]+)> *([0-9]+) *(?:money|bcbw)\b/i.exec(message),
+    getInventory = /^(my|<@!?([0-9]+)>(?: *'?s)?) *inv(?:entory)?\b/i.exec(message),
+    convertMoney = /^(?:exchange|convert) *([0-9]+) *bcbw *(?:to|2) *([a-z]+)\b/i.exec(message),
+    rob = /^(?:rob|steal) *(?:from|d')? *<@!?([0-9]+)>/i.exec(message),
+    consume = /^(?:consume|eat|drink) *(\S{1,2})/i.exec(message),
+    bankPut = /^put *([0-9]+) *(?:money|bcbw) *in *(?:the|l')? *bank\b/i.exec(message),
+    bankTake = /^take *([0-9]+) *(?:money|bcbw) *(?:from|d') *(?:the|l')? *bank\b/i.exec(message);
     if (echo) {
       let circumfix = echo[1] ? "```" : "",
       content = (echo[3] ? echo[5] : echo[5].trim()) || "/shrug";
@@ -690,8 +726,8 @@ client.on("message", msg => {
         channel.send(`**${userData[userID].name}**, you're a bit busy with another robbery at the moment.`);
       } else {
         let victim = rob[1];
-        if (channel.members.has(victim)) {
-          prepareUser(victim);
+        prepareUser(victim);
+        if (channel.type !== "dm" && channel.members.has(victim)) {
           robberies[userID] = {
             victim: victim,
             startTime: Date.now()
@@ -733,7 +769,7 @@ client.on("message", msg => {
           case "moofy coffee":
             let affect = Math.floor(Math.random() * 480000 + 180000);
             userData[userID].stats.coffeeConsumed++;
-            userData[userID].stats.lastMine -= affect;
+            userData[userID].lastMine -= affect;
             channel.send(`**${userData[userID].name}**: *drinks coffee* yAayayYAYAYYAYAYAYAYAYAYYA *shakes violently*`);
             break;
           default:
@@ -744,6 +780,30 @@ client.on("message", msg => {
         sendOK = false;
         msg.react(thumbs_down);
         channel.send(`NO. BAD **${userData[userID].name.toUpperCase()}**. YOU HAVEN'T PURCHASED IT YET.`);
+      }
+    } else if (bankPut) {
+      let amount = +bankPut[1];
+      if (amount <= userData[userID].money) {
+        userData[userID].bankMoney += amount;
+        userData[userID].money -= amount;
+        updateUserData();
+        channel.send(`thank you for trusting the MOOFY BANK SERVICES`);
+      } else {
+        sendOK = false;
+        msg.react(thumbs_down);
+        channel.send(`you don't have that much money you silly`);
+      }
+    } else if (bankTake) {
+      let amount = +bankTake[1];
+      if (amount <= userData[userID].bankMoney) {
+        userData[userID].bankMoney -= amount;
+        userData[userID].money += Math.floor(amount * (1 - withdrawFee));
+        updateUserData();
+        channel.send(`thank you for trusting the MOOFY BANK SERVICES. we've taken ${withdrawFee * 100}% of the money as payment`);
+      } else {
+        sendOK = false;
+        msg.react(thumbs_down);
+        channel.send(`you don't have that much money in the bank you silly`);
       }
     } else {
       sendOK = false;

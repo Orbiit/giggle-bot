@@ -8,7 +8,7 @@
   "dumb bot": "trigger the bot\n\n`dumb` + `bot`",
   "should've": "learn proper grammar\n\n`[could|might|should|will|would]['ve| have]",
   "@moofy-bot delete 10": "takes the 10 latest messages and deletes the ones that are from the bot\n\nmention + `delete[<nonnegative number>]`",
-  "@moofy-bot react [emoji]": "reacts the emoji (unless it's a custom one, or if it's thumbs up/down) on a message. you can set the message by reacting TREE on it (for some reason it doesn't work if the message existed before the bot restarted)\n\nmention + `react[emoji]` (only unicode (not custom) emojis that are supported on Discord are allowed; the bot doesn't know if the reaction works, so don't be suprised if nothing appears; it might just be )",
+  "@moofy-bot react [emoji]": "reacts the emoji (unless it's a custom one, or if it's thumbs up/down) on a message. you can set the message by reacting TREE on it (for some reason it doesn't work if the message existed before the bot restarted)\n\nmention + `react[<emoji>]` (only unicode (not custom) emojis that are supported on Discord are allowed; the bot doesn't know if the reaction works, so don't be suprised if nothing appears; it might just be unsupported)",
   "inspect emoji": "opens up an emoji inspector that inspects the emoji from a reaction\n\n`inspectemoji`",
   "pick a random number between 1 and 10": "picks a number between the given range\n\n`(pick)(a)rand(om)num(ber)(d'|from|between)[<nonnegative integer>](-|to|t'|&|and|n')[<nonnegative integer>]`",
   "actually pick a random number between 1 and 10": "picks a *random* number between the given range\n\n`actually(pick)(a)rand(om)num(ber)(d'|from|between)[<nonnegative integer>](-|to|t'|&|and|n')[<nonnegative integer>]`",
@@ -24,5 +24,14 @@
   "@moofy-bot GAME": "starts a game with moofy-bot that can earn you some bitcoin but worse (BCBW)\n\n`hint 3` allows you to buy the third letter\n`cancel` cancels the game\n\nmention + `GAME` (it must be in all caps)",
   "@moofy-bot profiles": "lists profiles that have a bitcoin but worse (BCBW) account\n\nmention + `profile(s)`",
   "@moofy-bot leaderboard": "lists the people with the most bitcoin but worse (BCBW)\n\nmention + `leader(board)`",
-  "exchange 1000 bcbw to democoin": "converts the given amount of bitcoin but worse (BCBW) to DemoCoin\n\n`[exchange|convert][<nonnegative integer>][to|2][democoin|dc]`"
+  "exchange 1000 bcbw to democoin": "converts the given amount of bitcoin but worse (BCBW) to DemoCoin\n\n`[exchange|convert][<nonnegative integer>][to|2][democoin|dc]`",
+  "@moofy-bot tell me more about command #1": "searchs the command help list and gives the nth result\n\nmention + `tellmemoreabout[<query>]((#)[<nonnegative integer>])` (the query can only consist of the letters a to z; 1-indexed result number)",
+  "rob from @person": "starts a robbery. while you are robbing, you can't rob more people, and people are able to take up to 4000 bitcoin but worse (BCBW) from you if they catch you. the person must be in the server\n\n`[rob|steal](from|d')[<user mention>]",
+  "HEY": "catches robbers if there are any\n\n`HEY` (case sensitive)",
+  "myprogress": "when robbing, it tells you how much bitcoin but worse (BCBW) you would steal if you run the `run` command. otherwise, it just outputs a list of current robberies for debug purposes.\n\n`myprogress`",
+  "run": "when robbing, it transfers the stolen bitcoin but worse (BCBW) to your account, and people can't catch you anymore\n\n`run`",
+  "put 123 bcbw in the bank": "gives the given amount of bitcoin but worse (BCBW) to your virtual bank account. you can't use money while it is in the bank. robbers can't steal bitcoin but worse (BCBW) that is in the bank.\n\n`put[<nonnegative integer>][money|bcbw](the|l')inbank`",
+  "take 123 money from the bank": "takes the given amount of bitcoin but worse (BCBW) from the bank so you can use it. however, the bank charges a small fee as payment for their protection.\n\n`take[<nonnegative integer>][money|bcbw][from|d'](the|l')bank`",
+  "my bank account": "outputs the bitcoin but worse (BCBW) in your account.\n\n`mybankacc(ount)`",
+  "drink ☕": "consumes the given item. some items can't be eaten. some items have a special effect when eaten. the emoji version of the item must be given (not the name)\n\n`[consume|drink|eat][<emoji>]` (only unicode (not custom) emojis that are supported on Discord are allowed)"
 }
