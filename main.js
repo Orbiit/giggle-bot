@@ -928,9 +928,15 @@ client.on("messageReactionAdd", (reaction, user) => {
     reactTarget = reaction.message;
   } else if (~paginations.indexOf(id) && messageReactionUpdate(reaction.emoji.name, id, user));
 });
+
 client.on("messageReactionRemove", (reaction, user) => {
   let id = reaction.message.id;
   if (~paginations.indexOf(id) && messageReactionUpdate(reaction.emoji.name, id, user));
+});
+
+client.on("error", err => {
+  console.error(err);
+  // client.destroy().then(() => client.login());
 });
 
 client.login(Token.token);
