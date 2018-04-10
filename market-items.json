@@ -25,5 +25,17 @@
     "price": 87,
     "buyable": true,
     "description": "Coffee is an incredible food item commonly used to be less tired. Moofy coffee is unique in that it is strawberry-flavoured and is magnetic. Consuming the coffee can reduce the time it takes for you to get less tired by 3-11 minutes."
+  },
+  "gun that shoots money": {
+    "emoji": "🔫",
+    "price": 472,
+    "buyable": true,
+    "description": "This is a simple gun that propells matter to a speed that would negatively impact a human physically should it impact the human at specific locations. Also, this gun is very light, so you can carry many at once. However, it cannot be reloaded, so you should always bring a healthy amount of 10 guns a day to your bank robberies."
+  },
+  "specialized pickaxe": {
+    "emoji": "🔨",
+    "price": 19824,
+    "buyable": false,
+    "description": "This specialised pickaxe is modelled after the great Hammer, meaning that you can more easily get bitcoin but worse (BCBW). However, no one uses this correctly, so it breaks often."
   }
 }

@@ -71,9 +71,9 @@ const pageTypes = {
       setTitle(`${username}'s profile`);
       return `**BCBW account created**: ${new Date(userData[userID].joined).toString()}\n`
         + `**BCBW**: ${userData[userID].money}\n`
-        + `**daily streak**: ${userData[userID].dailyStreak}\n`
+        + `**daily streak**: ${Date.now() - userData[userID].lastDaily > day * 2 ? 0 : userData[userID].dailyStreak}\n`
         + `\n__**Inventory**__\n`
-        + `coming soon (sorry i'm lazy)\n`
+        + `coming later (sorry i'm very lazy)\n`
         + `\n__**Stats**__\n`
         + `times mined: ${userData[userID].stats.timesMined}\n`
         + `GAME wins: ${userData[userID].stats.timesWonGame}\n`
@@ -213,17 +213,53 @@ const questionResponseResponders = {
     }
     let run = /\brun\b/i.test(msg.content);
     if (run || /\bmy *progress\b/i.test(msg.content)) {
-      let stolenMoney = Math.min(Math.floor((Date.now() - args.startTime) * robRate / 1000),
-        userData[args.victim].money);
+      let stolenMoney = Math.floor((Date.now() - args.startTime) * robRate / 1000);
+      if (args.bank) {
+        let totalBankMoney = Object.values(userData).map(u => u.bankMoney)
+          .reduce((a, b) => a + b);
+        stolenMoney = Math.min(stolenMoney, totalBankMoney);
+      } else {
+        stolenMoney = Math.min(stolenMoney, userData[args.victim].money)
+      }
       if (run) {
-        userData[args.victim].money -= stolenMoney;
-        userData[args.victim].stats.moneyLostFromRobbing -= stolenMoney;
+        if (args.bank) {
+          let stealDistribution = {},
+          peopleWithBankMoney = Object.keys(userData).filter(u => userData[u].bankMoney),
+          done = false,
+          moneyToDistribute = stolenMoney,
+          extraMoney = stolenMoney % peopleWithBankMoney.length;
+          while (!done) {
+            let allOK = true,
+            moneyPerUser = Math.floor(moneyToDistribute / peopleWithBankMoney.length); // money can disappear through rounding
+            for (let i = 0; i < peopleWithBankMoney.length; i++) {
+              let u = peopleWithBankMoney[i];
+              if (moneyPerUser > userData[u].bankMoney) {
+                allOK = false;
+                stealDistribution[u] = userData[u].bankMoney;
+                moneyToDistribute -= userData[u].bankMoney;
+                peopleWithBankMoney.splice(i--, 1);
+              } else {
+                stealDistribution[u] = moneyPerUser;
+              }
+            }
+            if (allOK) done = true;
+          }
+          Object.keys(stealDistribution).map(u => {
+            userData[u].bankMoney -= stealDistribution[u];
+            userData[u].stats.moneyLostFromRobbing -= stealDistribution[u];
+          });
+          msg.channel.send(`**${userData[msg.author.id].name}** successfully `
+            + `robbed **\`${stolenMoney}\`** bitcoin but worse from **__MOOFY BANK SERVICES__**`);
+        } else {
+          userData[args.victim].money -= stolenMoney;
+          userData[args.victim].stats.moneyLostFromRobbing -= stolenMoney;
+          msg.channel.send(`**${userData[msg.author.id].name}** successfully `
+            + `robbed **\`${stolenMoney}\`** bitcoin but worse from **${userData[args.victim].name}**`);
+        }
         userData[msg.author.id].money += stolenMoney;
         userData[msg.author.id].stats.moneyFromRobbing += stolenMoney;
         updateUserData();
         msg.react(ok);
-        msg.channel.send(`**${userData[msg.author.id].name}** successfully `
-          + `robbed **\`${stolenMoney}\`** bitcoin but worse from **${userData[args.victim].name}**`);
         delete robberies[msg.author.id];
         updateRobState();
         questionAwait.dontAutoKill = false;
@@ -248,7 +284,7 @@ questionAwaits = {},
 exchanges = {},
 scheduledRobStateUpdate = null;
 
-const latestUserVersion = 17;
+const latestUserVersion = 18;
 function prepareUser(id) {
   if (typeof id !== "string") id = id.toString();
   if (!userData[id]) userData[id] = {v: 0};
@@ -296,6 +332,9 @@ function prepareUser(id) {
         userData[id].stats.moneyLostFromRobbing *= -1;
     case 16:
       userData[id].bankMoney = 0;
+    case 17:
+      userData[id].bannedFromBank = false;
+      userData[id].stats.timesAttackedRobber = 0;
   }
   userData[id].v = latestUserVersion;
   updateUserData();
@@ -334,6 +373,12 @@ client.on("message", msg => {
     let valid = questionResponseResponders[questionAwaits[userID].type](msg, questionAwaits[userID].args, questionAwaits[userID]);
     if (!questionAwaits[userID].dontAutoKill) delete questionAwaits[userID];
     if (valid) return;
+  } else if (robberies[userID]) {
+    questionAwaits[userID] = {
+      type: "robbery",
+      args: robberies[userID],
+      dontAutoKill: true
+    };
   }
   let sendOK = true;
   prepareUser(userID);
@@ -423,7 +468,8 @@ client.on("message", msg => {
       });
     } else {
       let deleteRegex = /\bdelete *([0-9]+)\b/i.exec(message),
-      react = /\breact *(\S{1,2})/i.exec(message);
+      react = /\breact *(\S{1,2})/i.exec(message),
+      buy = /\bbuy *([0-9]+) *(\S{1,2})/i.exec(message);
       if (deleteRegex) {
         let amount = +deleteRegex[1];
         if (amount > 100) {
@@ -455,6 +501,32 @@ client.on("message", msg => {
         } catch (e) {
           channel.send(`<@${userID}> **\`\`\`${e.toString().toUpperCase()}\`\`\`**`);
           sendOK = false;
+        }
+      } else if (buy) {
+        let item = getItem(buy[2]);
+        if (item === null) {
+          sendOK = false;
+          msg.react(thumbs_down);
+          channel.send(`**${userData[userID].name}**, that isn't an item i know of`);
+        } else if (!marketData[item].buyable) {
+          sendOK = false;
+          msg.react(thumbs_down);
+          channel.send(`**${userData[userID].name}**, they don't sell that these days`);
+        } else {
+          let quantity = +buy[1],
+          totalCost = quantity * marketData[item].price;
+          if (totalCost > userData[userID].money) {
+            msg.channel.send(`**${userData[userID].name}** you don't have enough bitcoin but worse :/`);
+            msg.react(thumbs_down);
+            sendOK = false;
+          } else {
+            userData[userID].money -= totalCost;
+            prepareUserForItem(msg.author.id, item);
+            userData[userID].inventory[item] += quantity;
+            updateUserData();
+            msg.channel.send(`**${userData[userID].name}** thank you for your purchase.\n`
+              + `you bought ${marketData[item].emoji} x${quantity} (${item}) for \`${totalCost}\` bitcoin but worse`);
+          }
         }
       } else {
         channel.send(`<@${userID}> DON'T MENTION ME`);
@@ -565,8 +637,10 @@ client.on("message", msg => {
       sendOK = false;
     }
   } else if (/^HEY\b/.test(message)) {
-    if (Object.keys(robberies).length > 0) {
-      Object.keys(robberies).map(r => {
+    let personRobberies = Object.keys(robberies).filter(u => !robberies[u].bank);
+    if (personRobberies.length > 0) {
+      personRobberies.map(r => {
+        if (robberies[r].bank) return;
         let fine = userData[r] > 12000 ? 4000 : Math.floor(userData[r].money / 3);
         userData[r].money -= fine;
         userData[userID].money += fine;
@@ -589,10 +663,83 @@ client.on("message", msg => {
       msg.react(thumbs_down);
     }
   } else if (/^my *bank *acc(?:ount)?\b/i.test(message)) {
-    channel.send(`you have **\`${userData[userID].bankMoney}\`** bitcoin but worse protected by MOOFY BANK SERVICES`);
+    if (userData[userID].bannedFromBank) {
+      channel.send(`you were banned from the bank on ${new Date(userData[userID].bannedFromBank).toString()}`);
+    } else {
+      channel.send(`you have **\`${userData[userID].bankMoney}\`** bitcoin but worse protected by MOOFY BANK SERVICES`);
+    }
   } else if (/^my *progress\b/i.test(message)) {
     channel.send(`you aren't robbing right now. robbers: `
       + (Object.keys(robberies).map(id => `**${(userData[id] || {}).name}**`).join(", ") || "none"));
+  } else if (/^rob *(?:the|l')? *bank\b/i.test(message)) {
+    if (robberies[userID]) {
+      sendOK = false;
+      msg.react(thumbs_down);
+      channel.send(`**${userData[userID].name}**, you're a bit busy with another robbery at the moment.`);
+    } else {
+      if (channel.type !== "dm") {
+        robberies[userID] = {
+          bank: true,
+          startTime: Date.now()
+        };
+        questionAwaits[userID] = {
+          type: "robbery",
+          args: robberies[userID],
+          dontAutoKill: true
+        };
+        userData[msg.author.id].stats.timesRobbed++;
+        updateUserData();
+        updateRobState();
+        channel.send(`**${userData[userID].name.toUpperCase()}** IS STEALING `
+          + `FROM THE ***__MOOFY BANK SERVICES__***. TYPE **\`ATTACK\`**`
+          + ` TO ATTACK THE ROBBER.\nThere is no backing out now. Type \`my progress\` to`
+          + ` see how much money you stole, and \`run\` to escape with your BCBW.`
+          + `\n\n@everyone you might want to wake up`);
+      } else {
+        sendOK = false;
+        msg.react(thumbs_down);
+        channel.send(`**${userData[userID].name}**, **${userData[victim].name}** doesn't live here!`);
+      }
+    }
+  } else if (/^attack\b/i.test(message)) {
+    let robbers = Object.keys(robberies);
+    if (robbers.length > 0) {
+      let gunName = "gun that shoots money";
+      if (userData[userID].inventory[gunName] > 0) {
+        let r = robbers[Math.floor(Math.random() * robbers.length)];
+        userData[userID].inventory[gunName]--;
+        if (userData[r].inventory[gunName] > 0) {
+          userData[r].inventory[gunName]--;
+          channel.send(`**${userData[r].name}** was shot! they have ${userData[r].inventory[gunName]} guns left`);
+        } else {
+          if (robberies[r].bank) {
+            userData[r].bannedFromBank = Date.now();
+            if (userData[userID].bannedFromBank) {
+              userData[userID].bannedFromBank = false;
+              channel.send(`<@${userID}> for your service the MOOFY BANK SERVICES`
+                + ` has decided to unban you`);
+            }
+          }
+          userData[r].timesGotCaught++;
+          userData[userID].timesAttackedRobber++;
+          channel.send(`**${userData[r].name}** caught! they will be forced to `
+            + `return the stolen money and will be banned from MOOFY BANK SERVICES`);
+          delete robberies[r];
+          updateRobState();
+        }
+        updateUserData();
+      } else {
+        channel.send(`**${userData[userID].name}**, you need a gun to attack`);
+        sendOK = false;
+        msg.react(thumbs_down);
+      }
+    } else {
+      let objects = ["bird"];
+      channel.send(`**${userData[userID].name}** accidentally attacked a `
+        + objects[Math.floor(Math.random() * objects.length)]);
+      sendOK = false;
+      msg.react(thumbs_down);
+    }
   } else {
     let echo = /^echo(c?)(x?)(s?)(e?):([^]+)/im.exec(message),
     ofNotHaveRegex = /\b(could|might|should|will|would)(?:'?ve| +have)\b/gi,
@@ -753,9 +900,8 @@ client.on("message", msg => {
         }
       }
     } else if (consume) {
-      let item;
-      for (item in marketData) if (marketData[item].emoji === consume[1]) break;
-      if (marketData[item].emoji !== consume[1]) {
+      let item = getItem(consume[1]);
+      if (item === null) {
         sendOK = false;
         msg.react(thumbs_down);
         channel.send(`**${userData[userID].name}**, that isn't an item i know of`);
@@ -783,7 +929,9 @@ client.on("message", msg => {
       }
     } else if (bankPut) {
       let amount = +bankPut[1];
-      if (amount <= userData[userID].money) {
+      if (userData[userID].bannedFromBank) {
+        channel.send(`you were banned from the bank on ${new Date(userData[userID].bannedFromBank).toString()}`);
+      } else if (amount <= userData[userID].money) {
         userData[userID].bankMoney += amount;
         userData[userID].money -= amount;
         updateUserData();
@@ -795,7 +943,9 @@ client.on("message", msg => {
       }
     } else if (bankTake) {
       let amount = +bankTake[1];
-      if (amount <= userData[userID].bankMoney) {
+      if (userData[userID].bannedFromBank) {
+        channel.send(`you were banned from the bank on ${new Date(userData[userID].bannedFromBank).toString()}`);
+      } else if (amount <= userData[userID].bankMoney) {
         userData[userID].bankMoney -= amount;
         userData[userID].money += Math.floor(amount * (1 - withdrawFee));
         updateUserData();
@@ -907,6 +1057,12 @@ function messageReactionUpdate(reaction, messageID, user) {
   return true;
 }
 
+function getItem(emoji) {
+  for (let item in marketData)
+    if (marketData[item].emoji === emoji) return item;
+  return null;
+}
+
 client.on("messageReactionAdd", (reaction, user) => {
   if (client.user.id === user.id) return;
   let id = reaction.message.id;
@@ -936,7 +1092,7 @@ client.on("messageReactionRemove", (reaction, user) => {
 
 client.on("error", err => {
   console.error(err);
-  // client.destroy().then(() => client.login());
+  client.destroy().then(() => client.login());
 });
 
 client.login(Token.token);
