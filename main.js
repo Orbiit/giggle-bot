@@ -207,7 +207,7 @@ const questionResponseResponders = {
     }
     let run = /\brun\b/i.test(msg.content);
     if (run || /\bmy *progress\b/i.test(msg.content)) {
-      let stolenMoney = Math.floor((Date.now() - args.startTime - 300000) * robRate / 1000);
+      let stolenMoney = Math.floor((Date.now() - args.startTime - 5000) * robRate / 1000);
       if (stolenMoney < 0) stolenMoney = 0;
       if (args.bank) {
         let totalBankMoney = Object.values(userData).map(u => u.bankMoney)
@@ -217,6 +217,7 @@ const questionResponseResponders = {
         stolenMoney = Math.min(stolenMoney, userData[args.victim].money)
       }
       if (run) {
+        userData[msg.author.id].lastRobbery = Date.now();
         if (args.bank) {
           let stealDistribution = {},
           peopleWithBankMoney = Object.keys(userData).filter(u => userData[u].bankMoney),
@@ -243,14 +244,14 @@ const questionResponseResponders = {
           Object.keys(stealDistribution).map(u => {
             DEBUG_STRING += `\n${userData[u].name} lost ${stealDistribution[u]} (orig: ${userData[u].bankMoney})`;
             userData[u].bankMoney -= stealDistribution[u];
-            userData[u].stats.moneyLostFromRobbing -= stealDistribution[u];
+            userData[u].stats.moneyLostFromRobbing += stealDistribution[u];
           });
           msg.channel.send(`**${userData[msg.author.id].name}** successfully `
             + `robbed **\`${stolenMoney}\`** bitcoin but worse from **__MOOFY BANK SERVICES__**`);
           msg.channel.send(DEBUG_STRING);
         } else {
           userData[args.victim].money -= stolenMoney;
-          userData[args.victim].stats.moneyLostFromRobbing -= stolenMoney;
+          userData[args.victim].stats.moneyLostFromRobbing += stolenMoney;
           msg.channel.send(`**${userData[msg.author.id].name}** successfully `
             + `robbed **\`${stolenMoney}\`** bitcoin but worse from **${userData[args.victim].name}**`);
         }
@@ -283,7 +284,7 @@ exchanges = {},
 scheduledRobStateUpdate = null,
 DiscowChannel = null;
 
-const latestUserVersion = 18;
+const latestUserVersion = 19;
 function prepareUser(id) {
   if (typeof id !== "string") id = id.toString();
   if (!userData[id]) userData[id] = {v: 0};
@@ -334,6 +335,10 @@ function prepareUser(id) {
     case 17:
       userData[id].bannedFromBank = false;
       userData[id].stats.timesAttackedRobber = 0;
+    case 18:
+      userData[id].lastRobbery = 0;
+      if (userData[id].stats.moneyLostFromRobbing < 0)
+        userData[id].stats.moneyLostFromRobbing *= -1;
   }
   userData[id].v = latestUserVersion;
   updateUserData();
@@ -391,7 +396,7 @@ client.on("message", msg => {
       ).replace(/hatred/g, "love") + "```");
     sendOK = false;
     msg.react(thumbs_down);
-  } else if (msg.mentions.users.has(client.user.id) || /^moofy,? */i.test(message)) {
+  } else if (userID !== DiscowID && (msg.mentions.users.has(client.user.id) || /^moofy,? */i.test(message))) {
     let moreInfo = /\btell *me *more *about *([a-z]+)(?: *#?([0-9]+))?/i.exec(message);
     if (moreInfo) {
       let query = moreInfo[1].trim().toLowerCase(),
@@ -695,31 +700,9 @@ client.on("message", msg => {
       sendOK = false;
     }
   } else if (/^HEY\b/.test(message)) {
-    let personRobberies = Object.keys(robberies).filter(u => !robberies[u].bank);
-    if (personRobberies.length > 0) {
-      personRobberies.map(r => {
-        if (robberies[r].bank) return;
-        let fine = userData[r] > 12000 ? 4000 : Math.floor(userData[r].money / 3);
-        userData[r].money -= fine;
-        userData[userID].money += fine;
-        userData[r].timesGotCaught++;
-        userData[userID].timesCaughtRobber++;
-        updateUserData();
-        channel.send(`**${userData[r].name}** caught! they will be forced to `
-          + `return the stolen money and pay **\`${fine}\`** bitcoin but worse `
-          + `to **${userData[userID].name}** for their service.`);
-        delete robberies[r];
-      });
-      updateRobState();
-    } else {
-      let objects = ["bird", "bee", "pickle", "car", "performer", "clock", "pencil",
-        "tree", "plane", "hallucination", "superhero who forgot to put on their jacket this morning",
-        "dictator", "cloud of poison gas", "cat"];
-      channel.send(`**${userData[userID].name}**, there aren't any ongoing robberies. that was probably a `
-        + objects[Math.floor(Math.random() * objects.length)]);
-      sendOK = false;
-      msg.react(thumbs_down);
-    }
+    channel.send(`**${userData[userID].name}**, the \`HEY\` command is now deprecated. please use \`attack\``);
+    sendOK = false;
+    msg.react(thumbs_down);
   } else if (/^my *bank *acc(?:ount)?\b/i.test(message)) {
     if (userData[userID].bannedFromBank) {
       channel.send(`you were banned from the bank on ${new Date(userData[userID].bannedFromBank).toString()}`);
@@ -734,6 +717,10 @@ client.on("message", msg => {
       sendOK = false;
       msg.react(thumbs_down);
       channel.send(`**${userData[userID].name}**, you're a bit busy with another robbery at the moment.`);
+    } else if (Date.now() - userData[userID].lastRobbery < 1800000) {
+      sendOK = false;
+      msg.react(thumbs_down);
+      channel.send(`**${userData[userID].name}**, you're still tired from your last robbery`);
     } else {
       if (channel.type !== "dm") {
         robberies[userID] = {
@@ -759,6 +746,12 @@ client.on("message", msg => {
         channel.send(`**${userData[userID].name}**, **${userData[victim].name}** doesn't live here!`);
       }
     }
+  } else if (/^idea *(for|4)? *moofy:/i.test(message)) {
+    let idea = "\n".repeat(3) + "@" + msg.author.tag + " SAID:\n" + message.slice(message.indexOf(":") + 1).trim();
+    fs.readFile('./ideas.txt', (err, data) => {
+      fs.writeFile('./ideas.txt', data + idea, () => {});
+    });
+    channel.send(`<@${userID}> saved`);
   } else {
     let echo = /^echo(c?)(x?)(s?)(e?):([^]+)/im.exec(message),
     ofNotHaveRegex = /\b(could|might|should|will|would)(?:'?ve| +have)\b/gi,
@@ -773,7 +766,7 @@ client.on("message", msg => {
     consume = /^(?:consume|eat|drink) *(\S{1,2})/i.exec(message),
     bankPut = /^put *([0-9]+) *(?:money|bcbw)? *in *(?:the|l')? *bank\b/i.exec(message),
     bankTake = /^take *([0-9]+) *(?:money|bcbw)? *(?:from|d') *(?:the|l')? *bank\b/i.exec(message),
-    attack = /^attack(?: *([0-9]+))?\b/i.exec(message);
+    attack = /^attack *([0-9]*)\b/i.exec(message);
     if (echo) {
       let circumfix = echo[1] ? "```" : "",
       content = (echo[3] ? echo[5] : echo[5].trim()) || "/shrug";
@@ -884,10 +877,10 @@ client.on("message", msg => {
           break;
         case "mooney":
           sendOK = false;
-          DiscowChannel.send({
+          DiscowChannel.send(`<@${DiscowID}>`, {
             embed: {
               title: `convert`,
-              description: `<@${userID}> ${amount} mooney`, // the given amount is actually in BCBW
+              description: `<@${userID}> ${amount} bcbw`, // the given amount is actually in BCBW
               color: colour
             }
           }).then(embedMsg => {
@@ -954,6 +947,7 @@ client.on("message", msg => {
             let affect = Math.floor(Math.random() * 480000 + 300000);
             userData[userID].stats.coffeeConsumed++;
             userData[userID].lastMine -= affect;
+            userData[userID].lastRobbery -= affect;
             channel.send(`**${userData[userID].name}**: *drinks coffee* yAayayYAYAYYAYAYAYAYAYAYYA *shakes violently*`);
             break;
           case "DemoCoin geode":
@@ -978,7 +972,7 @@ client.on("message", msg => {
       } else {
         sendOK = false;
         msg.react(thumbs_down);
-        channel.send(`NO. BAD **${userData[userID].name.toUpperCase()}**. YOU HAVEN'T PURCHASED IT YET.`);
+        channel.send(`**${userData[userID].name}**, you don't have any of that item.`);
       }
     } else if (bankPut) {
       let amount = +bankPut[1];
@@ -1009,8 +1003,10 @@ client.on("message", msg => {
         channel.send(`you don't have that much money in the bank you silly`);
       }
     } else if (attack) {
-      let times = +(attack[1] || 1);
-      function attack(first) {
+      let times = +(attack[1] || 1),
+      messages = [],
+      reactedThumbsdown = false;
+      function attackOnce() {
         let robbers = Object.keys(robberies).filter(r => r !== client.user.id),
         continueAttacking = times-- > 1;
         if (robbers.length > 0) {
@@ -1020,22 +1016,22 @@ client.on("message", msg => {
             userData[userID].inventory[gunName]--;
             if (userData[r].inventory[gunName] > 0) {
               userData[r].inventory[gunName]--;
-              channel.send(`**${userData[r].name}** was shot! they have ${userData[r].inventory[gunName]} guns left`);
+              messages.push(`**${userData[r].name}** was shot! they have ${userData[r].inventory[gunName]} guns left`);
             } else {
               if (robberies[r].bank) {
                 userData[r].bannedFromBank = Date.now();
                 if (userData[userID].bannedFromBank) {
                   userData[userID].bannedFromBank = false;
-                  channel.send(`<@${userID}> for your service the MOOFY BANK SERVICES`
+                  messages.push(`<@${userID}> for your service the MOOFY BANK SERVICES`
                     + ` has decided to unban you`);
                 }
-                channel.send(`**${userData[r].name}** caught! they will be forced to `
+                messages.push(`**${userData[r].name}** caught! they will be forced to `
                   + `return the stolen money and will be banned from MOOFY BANK SERVICES`);
               } else {
                 let fine = userData[r] > 12000 ? 4000 : Math.floor(userData[r].money / 3);
                 userData[r].money -= fine;
                 userData[userID].money += fine;
-                channel.send(`**${userData[r].name}** caught! they will be forced to `
+                messages.push(`**${userData[r].name}** caught! they will be forced to `
                   + `return the stolen money and pay **\`${fine}\`** bitcoin but worse `
                   + `to **${userData[userID].name}** for their service.`);
               }
@@ -1046,9 +1042,9 @@ client.on("message", msg => {
             }
             updateUserData();
           } else {
-            channel.send(`**${userData[userID].name}**, you need a gun to attack`);
-            if (first) {
-              sendOK = false;
+            messages.push(`**${userData[userID].name}**, you need a gun to attack`);
+            if (!reactedThumbsdown) {
+              reactedThumbsdown = true;
               msg.react(thumbs_down);
             }
             continueAttacking = false;
@@ -1057,17 +1053,22 @@ client.on("message", msg => {
           let objects = ["cucumber", "blueberry", "trash can", "flying octopus",
             "grandma baking cookies", "mirror", "hallucination", "bypasser",
             "suspicious-looking person leaving the MOOFY BANK SERVICES with a bag of bitcoin but worse on his back"];
-          channel.send(`**${userData[userID].name}** accidentally attacked a `
+          messages.push(`**${userData[userID].name}** accidentally attacked a `
             + objects[Math.floor(Math.random() * objects.length)]);
-          if (first) {
-            sendOK = false;
+          if (!reactedThumbsdown) {
+            reactedThumbsdown = true;
             msg.react(thumbs_down);
           }
           continueAttacking = false;
         }
-        if (continueAttacking) setTimeout(attack, 100);
+        return continueAttacking;
       }
-      attack(true);
+      while (attackOnce());
+      if (messages.length > 10) {
+        messages.splice(3, messages.length - 10);
+        messages[3] = "[...]";
+      }
+      channel.send(messages.join("\n"));
     } else {
       sendOK = false;
     }
