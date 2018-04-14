@@ -35,5 +35,6 @@
   "drink ☕": "consumes the given item. some items can't be eaten. some items have a special effect when eaten. the emoji version of the item must be given (not the name)\n\n`[consume|drink|eat][<emoji item>]` (only unicode (not custom) emojis that are supported on Discord are allowed)",
   "moofy, buy 2 ☕": "buys the given quantity of given item. it's the shortcut version of the `moofy market` command. the bot doesn't ask for confirmation.\n\nmention + `buy[<nonnegative integer>][<emoji item>]`",
   "rob the bank": "starts a robbery of the bank. similar rules to `rob from @person`, but you risk getting banned from the bank (with your money trapped in the bank) if you are caught. fortunately, people can't just say `HEY`; they have to `attack` you first.\n\n`rob(the|l')bank`",
-  "attack": "attacks a random robber using a gun and consumes the gun. if the robber has a gun, they lose it but can continue robbing. however, if they do not have a gun, they get caught. you can add a number after the command to attack multiple times in a row\n\n`attack(<nonnegative integer>)` (default: 1)"
+  "attack": "attacks a random robber using a gun and consumes the gun. if the robber has a gun, they lose it but can continue robbing. however, if they do not have a gun, they get caught. you can add a number after the command to attack multiple times in a row\n\n`attack(<nonnegative integer>)` (default: 1)",
+  "idea for moofy: please fix the bugs": "saves the text after the colon to a txt file where the bot maker will check some time\n\n`idea(4|for)moofy:`"
 }

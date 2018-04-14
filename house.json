@@ -1,0 +1,82 @@
+{
+  "house": {
+    "maximum": 1,
+    "cost": 1000000,
+    "security": 0,
+    "command": "buy house"
+  },
+  "basic security": {
+    "maximum": 1,
+    "cost": 2000000,
+    "security": 25,
+    "command": "buy security"
+  },
+  "security guard(s)": {
+    "maximum": 5,
+    "cost": 100000,
+    "security": 5,
+    "command": "hire guard"
+  },
+  "advanced security": {
+    "maximum": 1,
+    "cost": 5000000,
+    "security": 50,
+    "command": "get adv security"
+  },
+  "motion detection": {
+    "maximum": 1,
+    "cost": 250000,
+    "security": 10,
+    "command": "buy motion"
+  },
+  "camera": {
+    "maximum": 1,
+    "cost": 300000,
+    "security": 10,
+    "command": "buy cameras"
+  },
+  "robot patrol": {
+    "maximum": 1,
+    "cost": 2000000,
+    "security": 20,
+    "command": "buy robot"
+  },
+  "super security": {
+    "maximum": 1,
+    "cost": 10000000,
+    "security": 55,
+    "command": "very supersecure"
+  },
+  "laser(s)": {
+    "maximum": 4,
+    "cost": 5000000,
+    "security": 25,
+    "command": "buy lazer"
+  },
+
+
+  "extra help": {
+    "maximum": 5,
+    "cost": 500000,
+    "assist": 5,
+    "command": "hire robber"
+  },
+  "veteran robber": {
+    "maximum": 2,
+    "cost": 500000,
+    "assist": 5,
+    "command": "veteran robber"
+  },
+  "gang help": {
+    "maximum": 1,
+    "cost": 500000,
+    "assist": 5,
+    "command": "ganggang"
+  },
+  "expert robber": {
+    "maximum": 3,
+    "cost": 500000,
+    "assist": 5,
+    "command": "expert robber"
+  }
+}

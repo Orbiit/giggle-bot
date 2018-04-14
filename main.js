@@ -10,6 +10,7 @@ const botinfo = require("./about.json");
 const userData = require("./users.json");
 const marketData = require("./market-items.json");
 const robberies = require("./rob-state.json");
+const houseData = require("./house.json");
 
 const thumbs_up = "👍";
 const thumbs_down = "👎";
@@ -103,14 +104,14 @@ const questionResponseResponders = {
       totalCost = quantity * item.price;
       prepareUser(msg.author.id);
       if (totalCost > userData[msg.author.id].money) {
-        msg.channel.send(`**${userData[msg.author.id].name}** you don't have enough bitcoin but worse :/`);
+        Helper.tempReply(msg, `**${userData[msg.author.id].name}** you don't have enough bitcoin but worse :/`);
         msg.react(thumbs_down);
       } else {
         userData[msg.author.id].money -= totalCost;
         prepareUserForItem(msg.author.id, name);
         userData[msg.author.id].inventory[name] += quantity;
         updateUserData();
-        msg.channel.send(`**${userData[msg.author.id].name}** thank you for your purchase.\n`
+        Helper.tempReply(msg, `**${userData[msg.author.id].name}** thank you for your purchase.\n`
           + `you bought ${marketData[name].emoji} x${quantity} (${name}) for \`${totalCost}\` bitcoin but worse`);
         msg.react(ok);
       }
@@ -124,17 +125,17 @@ const questionResponseResponders = {
       if (msg.content[0].toLowerCase() === "y") {
         if (userData[msg.author.id].money < 50) {
           msg.react(thumbs_down);
-          msg.channel.send(`${args.username}, not enough money!`);
+          Helper.tempReply(msg, 1000, `${args.username}, not enough money!`);
         } else {
           args.hinted.push(args.purchaseHint);
           userData[msg.author.id].money -= 50;
           userData[msg.author.id].stats.hintPurchases++;
-          msg.channel.send(`${args.username}, purchased! :)`);
+          Helper.tempReply(msg, 1000, `${args.username}, purchased! :)`);
           updateUserData();
           msg.react(ok);
         }
       } else {
-        msg.channel.send(`${args.username}, canceled purchase! :)`);
+        Helper.tempReply(msg, 1000, `${args.username}, canceled purchase! :)`);
         msg.react(ok);
       }
       args.purchaseHint = false;
@@ -144,12 +145,12 @@ const questionResponseResponders = {
         hint = +hint[1];
         if (hint > args.word.length || hint < 1) {
           msg.react(thumbs_down);
-          msg.channel.send(`${args.username}, the letter is out of range`);
+          Helper.tempReply(msg, 1000, `${args.username}, the letter is out of range`);
         } else if (~args.hinted.indexOf(hint)) {
           msg.react(thumbs_down);
-          msg.channel.send(`${args.username}, i already gave you the hint!`);
+          Helper.tempReply(msg, 1000, `${args.username}, i already gave you the hint!`);
         } else {
-          msg.channel.send(`${args.username}, purchase letter #${hint} for **\`50\`** bitcoin but worse? (y/n)`);
+          Helper.tempReply(msg, `${args.username}, purchase letter #${hint} for **\`50\`** bitcoin but worse? (y/n)`);
           args.purchaseHint = hint;
         }
       } else {
@@ -161,7 +162,7 @@ const questionResponseResponders = {
           msg.channel.send(`${args.username} just won **\`${reward}\`** bitcoin but worse!`);
           questionAwait.dontAutoKill = false;
         } else if (msg.content.toLowerCase() === "cancel") {
-          msg.channel.send(`cancel game. hints and penalties were not refunded. the word was **${args.word}**`);
+          Helper.tempReply(msg, `cancel game. hints and penalties were not refunded. the word was **${args.word}**`);
           questionAwait.dontAutoKill = false;
           args.tries--;
         } else if (args.tries >= 5 || userData[msg.author.id].money < 50) {
@@ -170,7 +171,7 @@ const questionResponseResponders = {
           questionAwait.dontAutoKill = false;
         } else {
           userData[msg.author.id].money -= 50;
-          msg.channel.send(`${args.username}, nope! **\`50\`** bitcoin but worse penalty!`);
+          Helper.tempReply(msg, 1000, `${args.username}, nope! **\`50\`** bitcoin but worse penalty!`);
         }
         updateUserData();
       }
@@ -248,7 +249,7 @@ const questionResponseResponders = {
           });
           msg.channel.send(`**${userData[msg.author.id].name}** successfully `
             + `robbed **\`${stolenMoney}\`** bitcoin but worse from **__MOOFY BANK SERVICES__**`);
-          msg.channel.send(DEBUG_STRING);
+          Helper.tempReply(msg, DEBUG_STRING);
         } else {
           userData[args.victim].money -= stolenMoney;
           userData[args.victim].stats.moneyLostFromRobbing += stolenMoney;
@@ -264,7 +265,7 @@ const questionResponseResponders = {
         questionAwait.dontAutoKill = false;
       } else {
         msg.react(ok);
-        msg.channel.send(`**${userData[msg.author.id].name}**, you have stolen `
+        Helper.tempReply(msg, `**${userData[msg.author.id].name}**, you have stolen `
           + `**\`${stolenMoney}\`** bitcoin but worse so far. type \`run\` to escape now`);
       }
       return true;
@@ -339,13 +340,18 @@ function prepareUser(id) {
       userData[id].lastRobbery = 0;
       if (userData[id].stats.moneyLostFromRobbing < 0)
         userData[id].stats.moneyLostFromRobbing *= -1;
+    case 19:
+      userData[id].inHouse = false;
+      userData[id].houseFeatures = {};
+      userData[id].houseSecurityLvl = 0;
+      userData[id].robHelpLvl = 0;
   }
   userData[id].v = latestUserVersion;
   updateUserData();
 }
-function prepareUserForItem(userID, itemName) {
-  if (userData[userID].inventory[itemName] === undefined)
-    userData[userID].inventory[itemName] = 0;
+function prepareUserForItem(userID, itemName, inventory = "inventory") {
+  if (userData[userID][inventory][itemName] === undefined)
+    userData[userID][inventory][itemName] = 0;
 }
 
 function updateUserData() {
@@ -396,6 +402,85 @@ client.on("message", msg => {
       ).replace(/hatred/g, "love") + "```");
     sendOK = false;
     msg.react(thumbs_down);
+  } else if (message.slice(0, 6).toLowerCase() === "moofy:") {
+    let command = message.toLowerCase().split(/ +/).slice(1).join(" "),
+    conclusive = false,
+    item;
+    for (let security in houseData) {
+      if (houseData[security].command === command) {
+        conclusive = true;
+        item = security;
+      }
+    }
+    if (conclusive) {
+      prepareUserForItem(userID, item, "houseFeatures");
+      if (userData[userID].money < houseData[item].cost) {
+        Helper.tempReply(msg, `**${userData[userID]}** you don't have enough bitcoin but worse`);
+        sendOK = false;
+        msg.react(thumbs_down);
+      } else if (userData[userID].houseFeatures[item] >= houseData[item].maximum) {
+        Helper.tempReply(msg, `**${userData[userID]}** you have too many ${item}`);
+        sendOK = false;
+        msg.react(thumbs_down);
+      } else {
+        userData[userID].money -= houseData[item].cost;
+        userData[userID].houseFeatures[item]++;
+        if (houseData[item].security)
+          userData[userID].houseSecurityLvl += houseData[item].security;
+        else
+          userData[userID].robHelpLvl += houseData[item].assist;
+        updateUserData();
+        Helper.tempReply(msg, `**${userData[userID]}** purchased 1x ${item} for **\`${houseData[item].cost}\`** bitcoin but worse`);
+      }
+    } else if (command === "house enter") {
+      if (userData[userID].inHouse) {
+        Helper.tempReply(msg, `**${userData[userID]}** you're already in your house silly`);
+        sendOK = false;
+        msg.react(thumbs_down);
+      } else {
+        userData[userID].inHouse = true;
+        updateUserData();
+      }
+    } else if (command === "house exit") {
+      if (!userData[userID].inHouse) {
+        Helper.tempReply(msg, `**${userData[userID]}** you're already outside your house silly`);
+        sendOK = false;
+        msg.react(thumbs_down);
+      } else {
+        userData[userID].inHouse = false;
+        updateUserData();
+      }
+    } else if (command === "my house") {
+      msg.author.createDM().then(channel => {
+        channel.send({
+          embed: {
+            color: colour,
+            title: "Your house",
+            description: `**Total security**: ${userData[userID].houseSecurityLvl}`
+              + `\n**Total robber assist**: ${userData[userID].robHelpLvl}`
+              + `\nYou are **${userData[userID].inHouse ? "" : "not "}in** your house.`,
+            fields: Object.keys(userData[userID].houseFeatures).map(f => ({
+              name: f,
+              value: userData[userID].houseFeatures[f],
+              inline: true
+            }))
+          }
+        });
+      });
+    } else {
+      Helper.tempReply(msg, {
+        embed: {
+          color: colour,
+          title: "Property system",
+          description: Object.keys(houseData).map(f => {
+            return `\`moofy: ${houseData[f].command} - buys a **${f}**`;
+          }).join("\n")
+            + `\n\`moofy: house enter\` - enters your house`
+            + `\n\`moofy: house exit\` - exits your house`
+            + `\n\`moofy: my house\` - DMs information about your house to you`
+        }
+      });
+    }
   } else if (userID !== DiscowID && (msg.mentions.users.has(client.user.id) || /^moofy,? */i.test(message))) {
     let moreInfo = /\btell *me *more *about *([a-z]+)(?: *#?([0-9]+))?/i.exec(message);
     if (moreInfo) {
@@ -403,13 +488,13 @@ client.on("message", msg => {
       resultIndex = +moreInfo[2] || 1,
       results = Object.keys(commands).filter(c => ~c.toLowerCase().indexOf(query));
       if (results.length === 0) {
-        channel.send(`couldn't find the command you were looking for (try \`@moofy-bot your commands\` for the full list)`);
+        Helper.tempReply(msg, `couldn't find the command you were looking for (try \`@moofy-bot your commands\` for the full list)`);
         sendOK = false;
         msg.react(thumbs_down);
       } else {
         if (resultIndex > results.length) resultIndex = results.length;
         let command = results[resultIndex - 1];
-        channel.send({
+        Helper.tempReply(msg, {
           embed: {
             title: `**\`${command}\`**`,
             description: commands[command].replace(/TREE/g, tree)
@@ -423,7 +508,7 @@ client.on("message", msg => {
       initPagination(msg, "commandList");
     } else if (/\bwho\b/i.test(message)) {
       let content = [];
-      channel.send({
+      Helper.tempReply(msg, {
         embed: {
           footer: {
             text: `VARIANT: ${botinfo.variant}`
@@ -457,7 +542,7 @@ client.on("message", msg => {
         };
       });
     } else if (/\bGAME\b/i.test(message)) {
-      channel.send(`NOT LOUD ENOUGH <@${userID}>`);
+      Helper.tempReply(msg, `NOT LOUD ENOUGH <@${userID}>`);
     } else if (/\bprofiles\b/i.test(message)) {
       initPagination(msg, "profiles");
     } else if (/\bleader(?:board)?\b/i.test(message)) {
@@ -475,16 +560,16 @@ client.on("message", msg => {
     } else {
       let deleteRegex = /\bdelete *([0-9]+)\b/i.exec(message),
       react = /\breact *(\S{1,2})/i.exec(message),
-      buy = /\bbuy *([0-9]+) *(\S{1,2})/i.exec(message),
+      buy = /\bbuy *([0-9]+|max(?:imum)?) *(\S{1,2})/i.exec(message),
       getProfile = /\bprofile *<@!?([0-9]+)>/i.exec(message);
       if (deleteRegex) {
         let amount = +deleteRegex[1];
         if (amount > 100) {
-          channel.send(`<@${userID}> due to technical limitations i can't delete more than 100`);
+          Helper.tempReply(msg, `<@${userID}> due to technical limitations i can't delete more than 100`);
           sendOK = false;
           msg.react(thumbs_down);
         } else if (Math.floor(Math.random() * 4)) {
-          channel.send(`<@${userID}> nahhh`);
+          Helper.tempReply(msg, `<@${userID}> nahhh`);
           sendOK = false;
           msg.react(thumbs_down);
         } else {
@@ -514,16 +599,18 @@ client.on("message", msg => {
         if (item === null) {
           sendOK = false;
           msg.react(thumbs_down);
-          channel.send(`**${userData[userID].name}**, that isn't an item i know of`);
+          Helper.tempReply(msg, `**${userData[userID].name}**, that isn't an item i know of`);
         } else if (!marketData[item].buyable) {
           sendOK = false;
           msg.react(thumbs_down);
-          channel.send(`**${userData[userID].name}**, they don't sell that these days`);
+          Helper.tempReply(msg, `**${userData[userID].name}**, they don't sell that these days`);
         } else {
-          let quantity = +buy[1],
-          totalCost = quantity * marketData[item].price;
+          let quantity;
+          if (buy[1][0] === "m") quantity = Math.floor(userData[userID].money / marketData[item].price);
+          else quantity = +buy[1];
+          let totalCost = quantity * marketData[item].price;
           if (totalCost > userData[userID].money) {
-            msg.channel.send(`**${userData[userID].name}** you don't have enough bitcoin but worse :/`);
+            Helper.tempReply(msg, `**${userData[userID].name}** you don't have enough bitcoin but worse :/`);
             msg.react(thumbs_down);
             sendOK = false;
           } else {
@@ -531,7 +618,7 @@ client.on("message", msg => {
             prepareUserForItem(msg.author.id, item);
             userData[userID].inventory[item] += quantity;
             updateUserData();
-            msg.channel.send(`**${userData[userID].name}** thank you for your purchase.\n`
+            Helper.tempReply(msg, `**${userData[userID].name}** thank you for your purchase.\n`
               + `you bought ${marketData[item].emoji} x${quantity} (${item}) for \`${totalCost}\` bitcoin but worse`);
           }
         }
@@ -545,7 +632,7 @@ client.on("message", msg => {
           }
         });
       } else {
-        channel.send(`<@${userID}> DON'T MENTION ME`);
+        Helper.tempReply(msg, `<@${userID}> DON'T MENTION ME`);
         sendOK = false;
       }
     }
@@ -591,11 +678,11 @@ client.on("message", msg => {
       userData[userID].lastDaily = now;
       userData[userID].dailyStreak++;
       updateUserData();
-      channel.send(`<@${userID}> good job! here's **\`500\`** bitcoin but worse for you :D\n`
+      Helper.tempReply(msg, `<@${userID}> good job! here's **\`500\`** bitcoin but worse for you :D\n`
         + `(${userData[userID].dailyStreak}-day streak!)` + addendum);
     } else {
       let lastDaily = new Date(userData[userID].lastDaily);
-      channel.send(`<@${userID}> be patient! you last got your daily at `
+      Helper.tempReply(msg, `<@${userID}> be patient! you last got your daily at `
         + `${(lastDaily.getHours() + 11) % 12 + 1}:${("0" + lastDaily.getMinutes()).slice(-2)} ${lastDaily.getHours() < 12 ? "a" : "p"}m`);
       sendOK = false;
       msg.react(thumbs_down);
@@ -606,7 +693,7 @@ client.on("message", msg => {
       usingSpecial = userData[userID].inventory["specialized pickaxe"] >= 1;
       if (now - userData[userID].lastMine < 600000) {
         sendOK = false;
-        channel.send(`you're still tired from your last mining session, **${userData[userID].name}**`);
+        Helper.tempReply(msg, `you're still tired from your last mining session, **${userData[userID].name}**`);
       } else {
         let brokenPickaxe, amount,
         demoCoinMined = false;
@@ -633,15 +720,15 @@ client.on("message", msg => {
         userData[userID].lastMine = now;
         updateUserData();
         if (usingSpecial && demoCoinMined) {
-          channel.send(`**${userData[userID].name}** just mined a DEMOCOIN GEODE`
+          Helper.tempReply(msg, `**${userData[userID].name}** just mined a DEMOCOIN GEODE`
             + (brokenPickaxe ? `\nyour pickaxe broke :(` : ""));
         } else {
-          channel.send(`**${userData[userID].name}** just mined **\`${amount}\`** bitcoin but worse!`
+          Helper.tempReply(msg, `**${userData[userID].name}** just mined **\`${amount}\`** bitcoin but worse!`
             + (brokenPickaxe ? `\nyour pickaxe broke :(` : ""));
         }
       }
     } else {
-      channel.send(`**${userData[userID].name}**, you don't have a pickaxe`);
+      Helper.tempReply(msg, `**${userData[userID].name}**, you don't have a pickaxe`);
       sendOK = false;
       msg.react(thumbs_down);
     }
@@ -672,7 +759,7 @@ client.on("message", msg => {
     } else {
       sendOK = false;
     }
-  } else if (userID === DiscowID) {
+  } else if (userID === DiscowID && msg.mentions.members.has(client.user.id)) {
     if (msg.embeds[0]) {
       let embed = msg.embeds[0];
       if (embed.title === "convert") {
@@ -700,27 +787,27 @@ client.on("message", msg => {
       sendOK = false;
     }
   } else if (/^HEY\b/.test(message)) {
-    channel.send(`**${userData[userID].name}**, the \`HEY\` command is now deprecated. please use \`attack\``);
+    Helper.tempReply(msg, `**${userData[userID].name}**, the \`HEY\` command is now deprecated. please use \`attack\``);
     sendOK = false;
     msg.react(thumbs_down);
   } else if (/^my *bank *acc(?:ount)?\b/i.test(message)) {
     if (userData[userID].bannedFromBank) {
-      channel.send(`you were banned from the bank on ${new Date(userData[userID].bannedFromBank).toString()}`);
+      Helper.tempReply(msg, `you were banned from the bank on ${new Date(userData[userID].bannedFromBank).toString()}`);
     } else {
-      channel.send(`you have **\`${userData[userID].bankMoney}\`** bitcoin but worse protected by MOOFY BANK SERVICES`);
+      Helper.tempReply(msg, `you have **\`${userData[userID].bankMoney}\`** bitcoin but worse protected by MOOFY BANK SERVICES`);
     }
   } else if (/^my *progress\b/i.test(message)) {
-    channel.send(`you aren't robbing right now. robbers: `
+    Helper.tempReply(msg, `you aren't robbing right now. robbers: `
       + (Object.keys(robberies).map(id => `**${(userData[id] || {}).name}**`).join(", ") || "none"));
   } else if (/^rob *(?:the|l')? *bank\b/i.test(message)) {
     if (robberies[userID]) {
       sendOK = false;
       msg.react(thumbs_down);
-      channel.send(`**${userData[userID].name}**, you're a bit busy with another robbery at the moment.`);
+      Helper.tempReply(msg, `**${userData[userID].name}**, you're a bit busy with another robbery at the moment.`);
     } else if (Date.now() - userData[userID].lastRobbery < 1800000) {
       sendOK = false;
       msg.react(thumbs_down);
-      channel.send(`**${userData[userID].name}**, you're still tired from your last robbery`);
+      Helper.tempReply(msg, `**${userData[userID].name}**, you're still tired from your last robbery`);
     } else {
       if (channel.type !== "dm") {
         robberies[userID] = {
@@ -743,7 +830,7 @@ client.on("message", msg => {
       } else {
         sendOK = false;
         msg.react(thumbs_down);
-        channel.send(`**${userData[userID].name}**, **${userData[victim].name}** doesn't live here!`);
+        Helper.tempReply(msg, `**${userData[userID].name}**, **${userData[victim].name}** doesn't live here!`);
       }
     }
   } else if (/^idea *(for|4)? *moofy:/i.test(message)) {
@@ -751,7 +838,18 @@ client.on("message", msg => {
     fs.readFile('./ideas.txt', (err, data) => {
       fs.writeFile('./ideas.txt', data + idea, () => {});
     });
-    channel.send(`<@${userID}> saved`);
+    Helper.tempReply(msg, `<@${userID}> saved`);
+  } else if (/^post *embed:/i.test(message)) {
+    let json = message.slice(message.indexOf(":") + 1).replace(/convert/gi, "");
+    try {
+      json = JSON.parse(json);
+      if (json.timestamp) json.timestamp = new Date(json.timestamp);
+      channel.send("as requested:", {embed: json});
+    } catch (e) {
+      sendOK = false;
+      msg.react(thumbs_down);
+      Helper.tempReply(msg, `there was a problem:\`\`\`\n${e}\`\`\`see https://discord.js.org/#/docs/main/stable/class/RichEmbed for more info`);
+    }
   } else {
     let echo = /^echo(c?)(x?)(s?)(e?):([^]+)/im.exec(message),
     ofNotHaveRegex = /\b(could|might|should|will|would)(?:'?ve| +have)\b/gi,
@@ -800,28 +898,28 @@ client.on("message", msg => {
         }
         r = +r.slice(0, -1) + min;
       }
-      channel.send(`<@${userID}> hmmm... I choose... **${r}**!`);
+      Helper.tempReply(msg, `<@${userID}> hmmm... I choose... **${r}**!`);
     } else if (getMoney) {
       let user = getMoney[1].toLowerCase() === "my" ? userID : getMoney[2];
       prepareUser(user);
-      channel.send(`**${userData[user].name}** has **\`${userData[user].money}\`** bitcoin but worse`);
+      Helper.tempReply(msg, `**${userData[user].name}** has **\`${userData[user].money}\`** bitcoin but worse`);
     } else if (setName) {
       if (setName[1].length < 2 || setName[1].length > 20) {
         sendOK = false;
         msg.react(thumbs_down);
-        channel.send(`the length of your name is too extreme, sorry!`);
+        Helper.tempReply(msg, `the length of your name is too extreme, sorry!`);
       } else if (~setName[1].indexOf("@")) {
         sendOK = false;
         msg.react(thumbs_down);
-        channel.send(`i have been instructed to disallow the usage of @ in names, sorry!`);
+        Helper.tempReply(msg, `i have been instructed to disallow the usage of @ in names, sorry!`);
       } else if (~setName[1].indexOf("﷽")) {
         sendOK = false;
         msg.react(thumbs_down);
-        channel.send(`i have been instructed to disallow the usage of ﷽ in names, sorry!`);
+        Helper.tempReply(msg, `i have been instructed to disallow the usage of ﷽ in names, sorry!`);
       } else if (!/[a-z0-9]/i.test(setName[1].normalize('NFD'))) {
         sendOK = false;
         msg.react(thumbs_down);
-        channel.send(`your name must include an alphanumeric character!`);
+        Helper.tempReply(msg, `your name must include an alphanumeric character!`);
       } else {
         updateUserData(userData[userID].name = setName[1].trim());
         channel.send(`hi, nice to meet you **${userData[userID].name}**`);
@@ -834,10 +932,10 @@ client.on("message", msg => {
         updateUserData(userData[userID].money -= amount);
         updateUserData(userData[given].money += amount);
         updateUserData();
-        channel.send(`**${userData[userID].name}** gave **\`${amount}\`** bitcoin but worse to **${userData[given].name}**`);
+        Helper.tempReply(msg, `**${userData[userID].name}** gave **\`${amount}\`** bitcoin but worse to **${userData[given].name}**`);
       } else {
         sendOK = false;
-        channel.send(`sorry, can't work with that amount <@${userID}>`);
+        Helper.tempReply(msg, `sorry, can't work with that amount <@${userID}>`);
         msg.react(thumbs_down);
       }
     } else if (getInventory) {
@@ -848,19 +946,19 @@ client.on("message", msg => {
         if (userData[user].inventory[item] === 0) continue;
         content += `\n${marketData[item].emoji} x${userData[user].inventory[item]} (${item})`;
       }
-      channel.send(`**${userData[user].name}** has:${content || "\n\n...nothing! :("}`);
+      Helper.tempReply(msg, `**${userData[user].name}** has:${content || "\n\n...nothing! :("}`);
     } else if (convertMoney) {
       let amount = +convertMoney[1],
       currency = convertMoney[2].toLowerCase();
       if (userData[userID].money < amount) {
         sendOK = false;
         msg.react(thumbs_down);
-        channel.send(`you don't have that much bitcoin but worse, **${userData[userID].name}**`);
+        Helper.tempReply(msg, `you don't have that much bitcoin but worse, **${userData[userID].name}**`);
       } else switch (currency) {
         case "democoin":
         case "dc":
           sendOK = false;
-          channel.send(`waiting for verification from <@${DemoCoinID}>`, {
+          Helper.tempReply(msg, `waiting for verification from <@${DemoCoinID}>`, {
             embed: {
               title: `convert ${amount / BCBWperDemoCoin}`,
               description: `<@${userID}>`,
@@ -895,13 +993,17 @@ client.on("message", msg => {
         default:
           sendOK = false;
           msg.react(thumbs_down);
-          channel.send(`that's not a currency i can convert to, **${userData[userID].name}**`);
+          Helper.tempReply(msg, `that's not a currency i can convert to, **${userData[userID].name}**`);
       }
     } else if (rob) {
       if (robberies[userID]) {
         sendOK = false;
         msg.react(thumbs_down);
-        channel.send(`**${userData[userID].name}**, you're a bit busy with another robbery at the moment.`);
+        Helper.tempReply(msg, `**${userData[userID].name}**, you're a bit busy with another robbery at the moment.`);
+      } else if (Date.now() - userData[userID].lastRobbery < 1800000) {
+        sendOK = false;
+        msg.react(thumbs_down);
+        Helper.tempReply(msg, `**${userData[userID].name}**, you're still tired from your last robbery`);
       } else {
         let victim = rob[1];
         prepareUser(victim);
@@ -920,14 +1022,14 @@ client.on("message", msg => {
           updateUserData();
           updateRobState();
           channel.send(`**${userData[userID].name.toUpperCase()}** IS STEALING `
-            + `FROM **${userData[victim].name.toUpperCase()}**. TYPE **\`HEY\`**`
-            + ` TO CATCH.\nThere is no backing out now. Type \`my progress\` to`
+            + `FROM **${userData[victim].name.toUpperCase()}**. TYPE **\`ATTACK\`**`
+            + ` TO FIGHT THE ROBBER.\nThere is no backing out now. Type \`my progress\` to`
             + ` see how much money you stole, and \`run\` to escape with your BCBW.`
             + `\n\n<@${victim}> you might want to wake up`);
         } else {
           sendOK = false;
           msg.react(thumbs_down);
-          channel.send(`**${userData[userID].name}**, **${userData[victim].name}** doesn't live here!`);
+          Helper.tempReply(msg, `**${userData[userID].name}**, **${userData[victim].name}** doesn't live here!`);
         }
       }
     } else if (consume) {
@@ -935,11 +1037,11 @@ client.on("message", msg => {
       if (item === null) {
         sendOK = false;
         msg.react(thumbs_down);
-        channel.send(`**${userData[userID].name}**, that isn't an item i know of`);
+        Helper.tempReply(msg, `**${userData[userID].name}**, that isn't an item i know of`);
       } else if (!marketData[item].consumable) {
         sendOK = false;
         msg.react(thumbs_down);
-        channel.send(`**${userData[userID].name}**, i don't think you should eat that`);
+        Helper.tempReply(msg, `**${userData[userID].name}**, i don't think you should eat that`);
       } else if (userData[userID].inventory[item] >= 1) {
         userData[userID].inventory[item]--;
         switch (item) {
@@ -948,12 +1050,12 @@ client.on("message", msg => {
             userData[userID].stats.coffeeConsumed++;
             userData[userID].lastMine -= affect;
             userData[userID].lastRobbery -= affect;
-            channel.send(`**${userData[userID].name}**: *drinks coffee* yAayayYAYAYYAYAYAYAYAYAYYA *shakes violently*`);
+            Helper.tempReply(msg, `**${userData[userID].name}**: *drinks coffee* yAayayYAYAYYAYAYAYAYAYAYYA *shakes violently*`);
             break;
           case "DemoCoin geode":
             let amount = Math.floor(Math.random() ** 3 * 1000000 + 5000) / 1000;
-            channel.send(`**${userData[userID].name}**: *chomps violently into the plastic jewel* whoa **${amount}** DemoCoins hidden within!`);
-            channel.send(`waiting for verification from <@${DemoCoinID}>`, {
+            Helper.tempReply(msg, `**${userData[userID].name}**: *chomps violently into the plastic jewel* whoa **${amount}** DemoCoins hidden within!`);
+            Helper.tempReply(msg, `waiting for verification from <@${DemoCoinID}>`, {
               embed: {
                 title: `convert ${amount}`,
                 description: `<@${userID}>`,
@@ -966,48 +1068,48 @@ client.on("message", msg => {
             });
             break;
           default:
-            channel.send(`**${userData[userID].name}**, item consumed`);
+            Helper.tempReply(msg, `**${userData[userID].name}**, item consumed`);
         }
         updateUserData();
       } else {
         sendOK = false;
         msg.react(thumbs_down);
-        channel.send(`**${userData[userID].name}**, you don't have any of that item.`);
+        Helper.tempReply(msg, `**${userData[userID].name}**, you don't have any of that item.`);
       }
     } else if (bankPut) {
       let amount = +bankPut[1];
       if (userData[userID].bannedFromBank) {
-        channel.send(`you were banned from the bank on ${new Date(userData[userID].bannedFromBank).toString()}`);
+        Helper.tempReply(msg, `you were banned from the bank on ${new Date(userData[userID].bannedFromBank).toString()}`);
       } else if (amount <= userData[userID].money) {
         userData[userID].bankMoney += amount;
         userData[userID].money -= amount;
         updateUserData();
-        channel.send(`thank you for trusting the MOOFY BANK SERVICES`);
+        Helper.tempReply(msg, `thank you for trusting the MOOFY BANK SERVICES`);
       } else {
         sendOK = false;
         msg.react(thumbs_down);
-        channel.send(`you don't have that much money you silly`);
+        Helper.tempReply(msg, `you don't have that much money you silly`);
       }
     } else if (bankTake) {
       let amount = +bankTake[1];
       if (userData[userID].bannedFromBank) {
-        channel.send(`you were banned from the bank on ${new Date(userData[userID].bannedFromBank).toString()}`);
+        Helper.tempReply(msg, `you were banned from the bank on ${new Date(userData[userID].bannedFromBank).toString()}`);
       } else if (amount <= userData[userID].bankMoney) {
         userData[userID].bankMoney -= amount;
         userData[userID].money += Math.floor(amount * (1 - withdrawFee));
         updateUserData();
-        channel.send(`thank you for trusting the MOOFY BANK SERVICES. we've taken ${withdrawFee * 100}% of the money as payment`);
+        Helper.tempReply(msg, `thank you for trusting the MOOFY BANK SERVICES. we've taken ${withdrawFee * 100}% of the money as payment`);
       } else {
         sendOK = false;
         msg.react(thumbs_down);
-        channel.send(`you don't have that much money in the bank you silly`);
+        Helper.tempReply(msg, `you don't have that much money in the bank you silly`);
       }
     } else if (attack) {
       let times = +(attack[1] || 1),
       messages = [],
       reactedThumbsdown = false;
       function attackOnce() {
-        let robbers = Object.keys(robberies).filter(r => r !== client.user.id),
+        let robbers = Object.keys(robberies).filter(r => r !== userID),
         continueAttacking = times-- > 1;
         if (robbers.length > 0) {
           let gunName = "gun that shoots money";
@@ -1068,7 +1170,7 @@ client.on("message", msg => {
         messages.splice(3, messages.length - 10);
         messages[3] = "[...]";
       }
-      channel.send(messages.join("\n"));
+      Helper.tempReply(msg, messages.join("\n"));
     } else {
       sendOK = false;
     }
@@ -1206,8 +1308,18 @@ client.on("messageReactionRemove", (reaction, user) => {
 });
 
 client.on("error", err => {
-  console.error(err);
+  err = err.message;
+  if (err.length > 50) console.log("YOU HAVE AN ERROR:\n" + err.slice(0, 24) + "..." + err.slice(-24));
+  else console.log("YOU HAVE AN ERROR:\n" + err);
   client.destroy().then(() => client.login());
+});
+
+process.on('unhandledRejection', (reason, p) => {
+  reason = reason.message;
+  if (reason.length > 50) console.log("UNHAPPY REJECT PROBLEM:\n" + reason.slice(0, 24) + "..." + reason.slice(-24));
+  else console.log("UNHAPPY REJECT PROBLEM:\n" + reason);
+  // console.log('REJECTION PROBLEM at: Promise', p, 'reason:', reason);
+  // client.destroy().then(() => client.login());
 });
 
 client.login(Token.token);
