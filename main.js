@@ -75,7 +75,7 @@ const pageTypes = {
       let userID;
       for (userID in userData) if (userData[userID].name === username) break;
       setTitle(`${username}'s profile`);
-      return Helper.getProfile(userData[userID]);
+      return Helper.getProfile(userData[userID], marketData);
     }
   },
   customEmojis: {
@@ -453,7 +453,7 @@ client.on("message", msg => {
       } else {
         userData[userID].money -= houseData[item].cost;
         userData[userID].houseFeatures[item]++;
-        if (houseData[item].security)
+        if (houseData[item].security !== undefined)
           userData[userID].houseSecurityLvl += houseData[item].security;
         else
           userData[userID].robHelpLvl += houseData[item].assist;
@@ -463,6 +463,10 @@ client.on("message", msg => {
     } else if (command === "house enter") {
       if (userData[userID].inHouse) {
         Helper.tempReply(msg, `**${userData[userID].name}** you're already in your house silly`);
+        sendOK = false;
+        msg.react(thumbs_down);
+      } else if (!userData[userID].houseFeatures.house) {
+        Helper.tempReply(msg, `**${userData[userID].name}** you don't have a house!`);
         sendOK = false;
         msg.react(thumbs_down);
       } else {
@@ -480,7 +484,7 @@ client.on("message", msg => {
       }
     } else if (command === "my house") {
       msg.author.createDM().then(channel => {
-        Helper.permaSend(msg, {
+        channel.send({
           embed: {
             color: colour,
             title: "Your house",
@@ -509,6 +513,28 @@ client.on("message", msg => {
         let amount = +command.slice(13).trim();
         Helper.permaSend(msg, `\`${amount / Math.max(total, 1000000) * 1000000}\` universal`);
       }
+    } else if (command.slice(0, 12) === "feature info") {
+      let featureName = command.slice(12).trim(),
+      feature = houseData[featureName];
+      if (feature) {
+        Helper.tempReply(msg, {
+          embed: {
+            title: featureName,
+            fields: [
+              {name: "cost", value: feature.cost, inline: true},
+              {name: "maximum", value: feature.maximum, inline: true},
+              feature.security !== undefined
+                ? {name: "security", value: feature.security, inline: true}
+                : {name: "assist", value: feature.assist, inline: true}
+            ],
+            color: colour
+          }
+        })
+      } else {
+        Helper.tempReply(msg, `**${userData[userID].name}** that's not a name of a feature`);
+        sendOK = false;
+        msg.react(thumbs_down);
+      }
     } else {
       Helper.tempReply(msg, {
         embed: {
@@ -520,6 +546,7 @@ client.on("message", msg => {
             + `\n\`moofy: house enter\` - enters your house`
             + `\n\`moofy: house exit\` - exits your house`
             + `\n\`moofy: my house\` - DMs information about your house to you`
+            + `\n\`moofy: feature info [feature name]\` - gives more information about the feature`
         }
       });
     }
@@ -682,7 +709,7 @@ client.on("message", msg => {
         Helper.permaSend(msg, {
           embed: {
             title: `${userDataEntry.name}'s profile`,
-            description: Helper.getProfile(userDataEntry),
+            description: Helper.getProfile(userDataEntry, marketData),
             color: colour
           }
         });
@@ -916,9 +943,7 @@ client.on("message", msg => {
       json = JSON.parse(json);
       if (json.timestamp) json.timestamp = new Date(json.timestamp);
       channel.send("as requested:", {embed: json}).catch(err => {
-        if (err.message !== "time is not defined") {
-          Helper.sendError(channel, err);
-        }
+        Helper.sendError(channel, err);
       });
     } catch (e) {
       sendOK = false;
@@ -1045,12 +1070,7 @@ client.on("message", msg => {
     } else if (getInventory) {
       let user = getInventory[1].toLowerCase() === "my" ? userID : getInventory[2];
       prepareUser(user);
-      let content = "";
-      for (let item in userData[user].inventory) {
-        if (userData[user].inventory[item] === 0) continue;
-        content += `\n${marketData[item].emoji} x${userData[user].inventory[item]} (${item})`;
-      }
-      Helper.tempReply(msg, `**${userData[user].name}** has:${content || "\n\n...nothing! :("}`);
+      Helper.tempReply(msg, `**${userData[user].name}** has:${Helper.getInventory(userData[user], marketData) || "\n\n...nothing! :("}`);
     } else if (convertMoney) {
       let amount = +convertMoney[1],
       currency = convertMoney[2].toLowerCase();

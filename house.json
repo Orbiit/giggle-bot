@@ -24,19 +24,19 @@
     "command": "get adv security"
   },
   "motion detection": {
-    "maximum": 1,
+    "maximum": 5,
     "cost": 250000,
     "security": 10,
     "command": "buy motion"
   },
   "camera": {
-    "maximum": 1,
+    "maximum": 10,
     "cost": 300000,
     "security": 10,
     "command": "buy cameras"
   },
   "robot patrol": {
-    "maximum": 1,
+    "maximum": 3,
     "cost": 2000000,
     "security": 20,
     "command": "buy robot"
@@ -53,6 +53,12 @@
     "security": 25,
     "command": "buy lazer"
   },
+  "ultra security": {
+    "maximum": 1,
+    "cost": 50000000,
+    "security": 75,
+    "command": "ultra secure"
+  },
 
 
   "extra help": {
@@ -63,20 +69,26 @@
   },
   "veteran robber": {
     "maximum": 2,
-    "cost": 500000,
-    "assist": 5,
+    "cost": 1500000,
+    "assist": 20,
     "command": "veteran robber"
   },
   "gang help": {
     "maximum": 1,
-    "cost": 500000,
-    "assist": 5,
+    "cost": 2000000,
+    "assist": 25,
     "command": "ganggang"
   },
   "expert robber": {
     "maximum": 3,
-    "cost": 500000,
-    "assist": 5,
+    "cost": 2500000,
+    "assist": 30,
     "command": "expert robber"
+  },
+  "good robber": {
+    "maximum": 5,
+    "cost": 1000000,
+    "assist": 10,
+    "command": "good robber"
   }
 }

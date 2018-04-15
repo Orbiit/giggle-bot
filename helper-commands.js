@@ -2,17 +2,25 @@ const day = 24 * 60 * 60 * 1000, // in ms
 tempMsgLifespan = 60000, // in ms
 error = 0xf44336;
 module.exports = {
-  getProfile(userDataEntry) {
-    return `**BCBW account created**: ${new Date(userDataEntry.joined).toString()}\n`
-      + `**BCBW**: ${userDataEntry.money}\n`
-      + `**daily streak**: ${Date.now() - userDataEntry.lastDaily > day * 2 ? 0 : userDataEntry.dailyStreak}\n`
-      + `\n__**Inventory**__\n`
-      + `coming later (sorry i'm very lazy)\n`
-      + `\n__**Stats**__\n`
-      + `times mined: ${userDataEntry.stats.timesMined}\n`
-      + `GAME wins: ${userDataEntry.stats.timesWonGame}\n`
-      + `GAME losses: ${userDataEntry.stats.timesLostGame}\n`
-      + `GAME hint purchases: ${userDataEntry.stats.hintPurchases}`
+  getProfile(userDataEntry, marketData) {
+    return `**BCBW account created**: ${new Date(userDataEntry.joined).toString()}`
+      + `\n**BCBW**: ${userDataEntry.money}`
+      + `\n**daily streak**: ${Date.now() - userDataEntry.lastDaily > day * 2 ? 0 : userDataEntry.dailyStreak}`
+      + `\n\n__**Inventory**__`
+      + this.getInventory(userDataEntry, marketData)
+      + `\n\n__**Stats**__`
+      + `\ntimes mined: ${userDataEntry.stats.timesMined}`
+      + `\nGAME wins: ${userDataEntry.stats.timesWonGame}`
+      + `\nGAME losses: ${userDataEntry.stats.timesLostGame}`
+      + `\nGAME hint purchases: ${userDataEntry.stats.hintPurchases}`
+      + `\ntimes they robbed: ${userDataEntry.stats.timesRobbed}`
+      + `\ntimes was robbed: ${userDataEntry.stats.timesGotRobbed}`
+      + `\nmoney from robbing others: ${userDataEntry.stats.moneyFromRobbing}`
+      + `\nmoney lost from robbers: ${userDataEntry.stats.moneyLostFromRobbing}`
+      + `\ntimes got caught: ${userDataEntry.stats.timesGotCaught}`
+      + `\ntimes caught a robber: ${userDataEntry.stats.timesCaughtRobber}`
+      + `\ncoffee consumed: ${userDataEntry.stats.coffeeConsumed}`
+      + `\ntimes attacked a robber: ${userDataEntry.stats.timesAttackedRobber}`
   },
   tempReply(origMsg, time, ...message) {
     if (!time || typeof time !== "number") {
@@ -68,6 +76,7 @@ module.exports = {
     return fields;
   },
   sendError(channel, err) {
+    if (err.message === "time is not defined") return;
     channel.send({
       embed: {
         color: error,
@@ -75,5 +84,13 @@ module.exports = {
         description: "```" + err.message + "```"
       }
     });
+  },
+  getInventory(userDataEntry, marketData) {
+    let content = "";
+    for (let item in userDataEntry.inventory) {
+      if (userDataEntry.inventory[item] === 0) continue;
+      content += `\n${marketData[item].emoji} x${userDataEntry.inventory[item]} (${item})`;
+    }
+    return content;
   }
 };
