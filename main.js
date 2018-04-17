@@ -388,6 +388,19 @@ function updateRobState() {
   }, 100);
 }
 
+function calculateUniversalExchangeRate() {
+  const DESIRED_EXCHANGE_RATE = 0.01; // BCBW:universal
+  const MAXIMUM_EXCHANGE_RATE = 1; // BCBW:universal
+  const NORMAL_TOTAL = 10000000; // BCBW
+
+  let total = 0; // BCBW
+  let totalInUniversal = NORMAL_TOTAL / DESIRED_EXCHANGE_RATE; // universal
+  let govMoney = totalInUniversal / MAXIMUM_EXCHANGE_RATE; //
+
+  Object.values(userData).forEach(u => total += u.money + u.bankMoney);
+  return 1 / (govMoney + total) * totalInUniversal;
+}
+
 client.on("ready", () => {
   console.log(`Logged in as ${client.user.tag}!`);
   Object.keys(userData).map(id => userData[id].v < latestUserVersion ? prepareUser(id) : 0);
@@ -418,6 +431,32 @@ client.on("message", msg => {
   }
   let sendOK = true;
   prepareUser(userID);
+  if (~botinfo.universalers.indexOf(userID) && msg.mentions.members.has(client.user.id)) {
+    if (msg.embeds[0]) {
+      let embed = msg.embeds[0];
+      if (embed.title === "convert") {
+        try {
+          let exec = /<@!?([0-9]+)> *([0-9.\-]+)/i.exec(embed.description),
+          user = exec[1],
+          amount = +exec[2];
+          prepareUser(user);
+          if (isNaN(amount) || amount < 0)
+            throw new Error("i don't like that \"positive number\" you have there");
+          else {
+            msg.react(ok);
+            const conversionRate = calculateUniversalExchangeRate();
+            userData[user].money += Math.floor(amount * conversionRate);
+            updateUserData();
+          }
+        } catch (e) {
+          Helper.permaSend(msg, "```" + e.toString() + "```");
+          sendOK = false;
+          msg.react(thumbs_down);
+        }
+        return;
+      }
+    }
+  }
   if (message.slice(-20) === "REPLACE COLON PLEASE") {
     message = message.replace(/COLON/g, ":");
   }
@@ -507,11 +546,13 @@ client.on("message", msg => {
       // maydoh recommends:
       // a universal total of 10000
       // and government money of 10000
+      const conversionRate = calculateUniversalExchangeRate();
       if (command.length === 13) {
-        Helper.permaSend(msg, `total BCBW: \`${total}\``);
+        Helper.permaSend(msg, `total BCBW: \`${total}\`. \`${conversionRate}\` BCBW = \`1\` universal`);
       } else {
         let amount = +command.slice(13).trim();
-        Helper.permaSend(msg, `\`${amount / Math.max(total, 1000000) * 1000000}\` universal`);
+        Helper.permaSend(msg, `\`${amount}\` BCBW = \`${amount / conversionRate}\` universal.`
+          + `\n\`${amount}\` universal = \`${amount * conversionRate}\` BCBW`);
       }
     } else if (command.slice(0, 12) === "feature info") {
       let featureName = command.slice(12).trim(),
@@ -845,37 +886,6 @@ client.on("message", msg => {
     } else {
       sendOK = false;
     }
-  } else if ((userID === DiscowID || userID === CowBotID) && msg.mentions.members.has(client.user.id)) {
-    if (msg.embeds[0]) {
-      let embed = msg.embeds[0];
-      if (embed.title === "convert") {
-        try {
-          let exec = /<@!?([0-9]+)> *([0-9.\-]+) *(?:bcbw|cb)/i.exec(embed.description),
-          user = exec[1],
-          amount = +exec[2];
-          prepareUser(user);
-          if (isNaN(amount) || amount < 0)
-            throw new Error("i don't like that \"positive number\" you have there");
-          else {
-            msg.react(ok);
-            if (userID === CowBotID) {
-              userData[user].money += Math.floor(amount / CowBitperBCBW);
-            } else {
-              userData[user].money += Math.floor(amount);
-            }
-            updateUserData();
-          }
-        } catch (e) {
-          Helper.permaSend(msg, "```" + e.toString() + "```");
-          sendOK = false;
-          msg.react(thumbs_down);
-        }
-      } else {
-        sendOK = false;
-      }
-    } else {
-      sendOK = false;
-    }
   } else if (/^HEY\b/.test(message)) {
     Helper.tempReply(msg, `**${userData[userID].name}**, the \`HEY\` command is now deprecated. please use \`attack\``);
     sendOK = false;
@@ -979,7 +989,7 @@ client.on("message", msg => {
     pageTypes.customEmojis.list = msg.guild.emojis.map(e => `<${e.animated ? "a" : ""}:${e.identifier}>`);
     initPagination(msg, "customEmojis");
   } else {
-    let echo = /^echo(c?)(x?)(s?)(e?):([^]+)/im.exec(message),
+    let echo = /^echo(c?)(x?)(s?)(e?)(u?):([^]+)/im.exec(message),
     ofNotHaveRegex = /\b(could|might|should|will|would)(?:'?ve| +have)\b/gi,
     ofNotHave = ofNotHaveRegex.exec(message),
     random = /^(actually *)?(?:pick *)?(?:a *)?rand(?:om)? *num(?:ber)? *(?:d'|from|between)? *([0-9]+) *(?:-|to|t'|&|and|n')? *([0-9]+)/i.exec(message),
@@ -996,7 +1006,8 @@ client.on("message", msg => {
     knowledge = /^what *do *(?:yo)?u *know *ab(?:ou)?t *(me\b|<@!?([0-9]+)>)/.exec(message);
     if (echo) {
       let circumfix = echo[1] ? "```" : "",
-      content = (echo[3] ? echo[5] : echo[5].trim()) || "/shrug";
+      content = (echo[3] ? echo[6] : echo[6].trim()) || "/shrug";
+      if (echo[5]) content = content.replace(/```/g, "");
       content = circumfix + content + circumfix;
       if (echo[4]) content = {
         embed: {
@@ -1101,11 +1112,13 @@ client.on("message", msg => {
           break;
         case "mooney":
         case "mn":
-          sendOK = false;
-          ConvertChannel.send(`<@${DiscowID}>`, {
+        case "cowbit":
+        case "cb":
+          const conversionRate = calculateUniversalExchangeRate();
+          ConvertChannel.send(`<@${currency[0] === "m" ? DiscowID : CowBotID}>`, {
             embed: {
               title: `convert`,
-              description: `<@${userID}> ${amount} bcbw`,
+              description: `<@${userID}> ${amount / conversionRate}`,
               color: colour
             }
           }).then(embedMsg => {
@@ -1118,26 +1131,7 @@ client.on("message", msg => {
               return true;
             };
           });
-          break;
-        case "cowbit":
-        case "cb":
           sendOK = false;
-          ConvertChannel.send(`<@${CowBotID}>`, {
-            embed: {
-              title: `convert`,
-              description: `<@${userID}> ${amount * CowBitperBCBW} cb`,
-              color: colour
-            }
-          }).then(embedMsg => {
-            exchanges[embedMsg.id] = (userID, reactionEmoji) => {
-              if (userID !== CowBotID || reactionEmoji !== ok) return false;
-              userData[userID].money -= amount;
-              updateUserData();
-              msg.react(ok);
-              // embedMsg.delete();
-              return true;
-            };
-          });
           break;
         default:
           sendOK = false;

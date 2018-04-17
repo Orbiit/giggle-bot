@@ -4,7 +4,7 @@
   "hate": "trigger the bot\n\n`[hate|hated|hates|hating|hatred|hater|haters]`",
   "pagination test": "a pagination test; the demo lets you select a word for it to spell out. this was the first command made for variant `giggle-bot`\n\n`pag[e|ination]test`",
   "use this channel": "sets the channel for where an external echo should go\n\n`usethischannel`",
-  "echo(c)(x)(s)(e): message": "sends what you sent.\n**flags**\nc - put the message in a code block\nx - sends the message to a different channel set by the `use this channel` command\ns - doesn't trim the whitespace after the colon\ne - puts the message in an embed (something that only bots can post)\n\n`echo(c)(x)(s)(e):` (there must be at least a non-whitespace character after the colon)",
+  "echo(c)(x)(s)(e)(u): message": "sends what you sent.\n**flags**\nc - put the message in a code block\nx - sends the message to a different channel set by the `use this channel` command\ns - doesn't trim the whitespace after the colon\ne - puts the message in an embed (something that only bots can post)\nu - if the message is surrounded in backticks, it will remove them\n\n`echo(c)(x)(s)(e)(u):` (there must be at least a non-whitespace character after the colon)",
   "dumb bot": "trigger the bot\n\n`dumb` + `bot`",
   "should've": "learn proper grammar\n\n`[could|might|should|will|would]['ve| have]",
   "@moofy-bot delete 10": "takes the 10 latest messages and deletes the ones that are from the bot\n\nmention + `delete[<nonnegative number>]`",

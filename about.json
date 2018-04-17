@@ -6,5 +6,9 @@
   "invite": "https://discordapp.com/oauth2/authorize?client_id=393248490739859458&scope=bot",
   "makers": [
     "212355530474127361"
+  ],
+  "universalers": [
+    "427890474708238339",
+    "427609586032443392"
   ]
 }
