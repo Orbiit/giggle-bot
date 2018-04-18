@@ -3,6 +3,7 @@ const Discord = require("discord.js");
 const client = new Discord.Client();
 
 const Helper = require("./helper-commands.js");
+const EvilEval = require("./evil-eval.js");
 const Token = require("./secret_stuff.json");
 const words = require("./items.json");
 const commands = require("./command-list.json");
@@ -302,7 +303,8 @@ scheduledUserDataUpdate = null,
 questionAwaits = {},
 exchanges = {},
 scheduledRobStateUpdate = null,
-ConvertChannel = null;
+ConvertChannel = null,
+silenceTimeout = null;
 
 const latestUserVersion = 20;
 function prepareUser(id) {
@@ -387,30 +389,31 @@ function updateRobState() {
     fs.writeFile("./rob-state.json", JSON.stringify(robberies), () => {});
   }, 100);
 }
-
-function calculateUniversalExchangeRate() {
-  const DESIRED_EXCHANGE_RATE = 0.01; // BCBW:universal
-  const MAXIMUM_EXCHANGE_RATE = 1; // BCBW:universal
-  const NORMAL_TOTAL = 10000000; // BCBW
-
-  let total = 0; // BCBW
-  let totalInUniversal = NORMAL_TOTAL / DESIRED_EXCHANGE_RATE; // universal
-  let govMoney = totalInUniversal / MAXIMUM_EXCHANGE_RATE; //
-
-  Object.values(userData).forEach(u => total += u.money + u.bankMoney);
-  return 1 / (govMoney + total) * totalInUniversal;
-}
-
-client.on("ready", () => {
-  console.log(`Logged in as ${client.user.tag}!`);
-  Object.keys(userData).map(id => userData[id].v < latestUserVersion ? prepareUser(id) : 0);
-  ConvertChannel = client.channels.get(ConvertChannelID);
+function setGame() {
   client.user.setPresence({
     game: {
       name: "you",
       type: 3
     }
   });
+}
+
+const DESIRED_EXCHANGE_RATE = 0.01; // universal:BCBW
+const MAXIMUM_EXCHANGE_RATE = 1; // universal:BCBW
+const UNIVERSAL_TOTAL = 100000; // universal?
+function calculateUniversalExchangeRate() {
+  let total = 0; // BCBW
+  let govMoney = UNIVERSAL_TOTAL / MAXIMUM_EXCHANGE_RATE; // ???
+
+  Object.values(userData).forEach(u => total += u.money + u.bankMoney);
+  return 1 / (govMoney + total) * UNIVERSAL_TOTAL;
+}
+
+client.on("ready", () => {
+  console.log(`Logged in as ${client.user.tag}!`);
+  Object.keys(userData).map(id => userData[id].v < latestUserVersion ? prepareUser(id) : 0);
+  ConvertChannel = client.channels.get(ConvertChannelID);
+  setGame();
 });
 
 client.on("message", msg => {
@@ -418,6 +421,7 @@ client.on("message", msg => {
   channel = msg.channel,
   userID = msg.author.id;
   if (userID === client.user.id) return;
+  if (silenceTimeout !== null) return;
   if (questionAwaits[userID]) {
     let valid = questionResponseResponders[questionAwaits[userID].type](msg, questionAwaits[userID].args, questionAwaits[userID]);
     if (!questionAwaits[userID].dontAutoKill) delete questionAwaits[userID];
@@ -445,7 +449,7 @@ client.on("message", msg => {
           else {
             msg.react(ok);
             const conversionRate = calculateUniversalExchangeRate();
-            userData[user].money += Math.floor(amount * conversionRate);
+            userData[user].money += Math.floor(amount / conversionRate);
             updateUserData();
           }
         } catch (e) {
@@ -466,7 +470,7 @@ client.on("message", msg => {
       + "```" + message.replace(
         /\b(hat)(e(s|d|rs?)?|ing)\b/gi,
         (m, c1, c2) => c1.split("").map(l => hat[l]).join("") + c2
-      ).replace(/hatred/g, "love") + "```");
+      ).replace(/hatred/gi, "love") + "```");
     sendOK = false;
     msg.react(thumbs_down);
   } else if (message.slice(0, 6).toLowerCase() === "moofy:") {
@@ -548,11 +552,11 @@ client.on("message", msg => {
       // and government money of 10000
       const conversionRate = calculateUniversalExchangeRate();
       if (command.length === 13) {
-        Helper.permaSend(msg, `total BCBW: \`${total}\`. \`${conversionRate}\` BCBW = \`1\` universal`);
+        Helper.permaSend(msg, `total BCBW: \`${total}\`. \`1\` BCBW = \`${conversionRate}\` universal`);
       } else {
         let amount = +command.slice(13).trim();
-        Helper.permaSend(msg, `\`${amount}\` BCBW = \`${amount / conversionRate}\` universal.`
-          + `\n\`${amount}\` universal = \`${amount * conversionRate}\` BCBW`);
+        Helper.permaSend(msg, `\`${amount}\` BCBW = \`${amount * conversionRate}\` universal.`
+          + `\n\`${amount}\` universal = \`${amount / conversionRate}\` BCBW`);
       }
     } else if (command.slice(0, 12) === "feature info") {
       let featureName = command.slice(12).trim(),
@@ -592,7 +596,7 @@ client.on("message", msg => {
       });
     }
   } else if (userID !== DiscowID && userID !== CowBotID && (msg.mentions.users.has(client.user.id) || /^moofy,? */i.test(message))) {
-    let moreInfo = /\btell *me *more *about *([a-z]+)(?: *#?([0-9]+))?/i.exec(message);
+    let moreInfo = /\bt(?:ell)? *me? *(?:more)? *a(?:bout)? *([a-z]+)(?: *#?([0-9]+))?/i.exec(message);
     if (moreInfo) {
       let query = moreInfo[1].trim().toLowerCase(),
       resultIndex = +moreInfo[2] || 1,
@@ -665,6 +669,19 @@ client.on("message", msg => {
           color: colour,
           title: "people with the most bitcoin but worse",
           description: peopleMoney.map(u => `\`+${(spaces + u.money).slice(-digitLengths)}\` **${u.name}**`).join("\n")
+        }
+      });
+    } else if (/\bSHUT *UP\b/.test(message)) {
+      if (silenceTimeout !== null) clearTimeout(silenceTimeout);
+      Helper.tempReply(msg, `**MOOFY WILL NOW IGNORE COMMANDS FOR A SECOND**`);
+      silenceTimeout = setTimeout(() => {
+        silenceTimeout = null;
+        setGame();
+      }, 1000);
+      client.user.setPresence({
+        game: {
+          name: "no one",
+          type: "LISTENING"
         }
       });
     } else {
@@ -960,7 +977,7 @@ client.on("message", msg => {
       msg.react(thumbs_down);
       Helper.tempReply(msg, `there was a problem:\`\`\`\n${e}\`\`\`see https://discord.js.org/#/docs/main/stable/class/RichEmbed for more info`);
     }
-  } else if (/^call *police\b/.test(message)) {
+  } else if (/^call *police\b/i.test(message)) {
     let personRobberies = Object.keys(robberies).filter(r => userData[r].inHouse);
     if (personRobberies.length > 0) {
       personRobberies.map(r => {
@@ -985,11 +1002,17 @@ client.on("message", msg => {
       sendOK = false;
       msg.react(thumbs_down);
     }
-  } else if (/^what *('?re|are) *(the)? *emojis? *(on)? *(this)? *server\b/.test(message)) {
+  } else if (/^what *('?re|are) *(the)? *emojis? *(on)? *(this)? *server\b/i.test(message)) {
     pageTypes.customEmojis.list = msg.guild.emojis.map(e => `<${e.animated ? "a" : ""}:${e.identifier}>`);
     initPagination(msg, "customEmojis");
+  } else if (message.slice(0, 11) === "eval: ```js") {
+    if (~botinfo.makers.indexOf(userID)) {
+      Helper.permaSend(msg, EvilEval.EVAL(message.slice(11, -3), msg));
+    } else {
+      Helper.tempReply(msg, `**${userData[userID].name}**, you do not have the permissions`);
+    }
   } else {
-    let echo = /^echo(c?)(x?)(s?)(e?)(u?):([^]+)/im.exec(message),
+    let echo = /^echo([cxseu]*):([^]+)/im.exec(message),
     ofNotHaveRegex = /\b(could|might|should|will|would)(?:'?ve| +have)\b/gi,
     ofNotHave = ofNotHaveRegex.exec(message),
     random = /^(actually *)?(?:pick *)?(?:a *)?rand(?:om)? *num(?:ber)? *(?:d'|from|between)? *([0-9]+) *(?:-|to|t'|&|and|n')? *([0-9]+)/i.exec(message),
@@ -1004,18 +1027,19 @@ client.on("message", msg => {
     bankTake = /^take *([0-9]+) *(?:money|bcbw)? *(?:from|d') *(?:the|l')? *bank\b/i.exec(message),
     attack = /^attack *([0-9]*)\b/i.exec(message),
     knowledge = /^what *do *(?:yo)?u *know *ab(?:ou)?t *(me\b|<@!?([0-9]+)>)/.exec(message);
-    if (echo) {
-      let circumfix = echo[1] ? "```" : "",
-      content = (echo[3] ? echo[6] : echo[6].trim()) || "/shrug";
-      if (echo[5]) content = content.replace(/```/g, "");
+    if (echo) { // cxseu
+      let flags = echo[1].toLowerCase(),
+      circumfix = ~flags.indexOf("c") ? "```" : "",
+      content = (~flags.indexOf("s") ? echo[2] : echo[2].trim()) || "/shrug";
+      if (~flags.indexOf("u")) content = content.replace(/```/g, "");
       content = circumfix + content + circumfix;
-      if (echo[4]) content = {
+      if (~flags.indexOf("e")) content = {
         embed: {
           description: content,
           color: colour
         }
       };
-      ((echo[2] ? externalEchoChannel : null) || channel)
+      ((~flags.indexOf("x") ? externalEchoChannel : null) || channel)
         .send(content);
     } else if (ofNotHave) {
       Helper.permaSend(msg,
@@ -1118,12 +1142,12 @@ client.on("message", msg => {
           ConvertChannel.send(`<@${currency[0] === "m" ? DiscowID : CowBotID}>`, {
             embed: {
               title: `convert`,
-              description: `<@${userID}> ${amount / conversionRate}`,
+              description: `<@${userID}> ${amount * conversionRate}`,
               color: colour
             }
           }).then(embedMsg => {
-            exchanges[embedMsg.id] = (userID, reactionEmoji) => {
-              if (userID !== DiscowID || reactionEmoji !== ok) return false;
+            exchanges[embedMsg.id] = (reactorID, reactionEmoji) => {
+              if (reactionEmoji !== ok || reactorID !== DiscowID && reactorID !== CowBotID) return false;
               userData[userID].money -= amount;
               updateUserData();
               msg.react(ok);
