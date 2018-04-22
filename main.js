@@ -4,6 +4,7 @@ const client = new Discord.Client();
 
 const Helper = require("./helper-commands.js");
 const EvilEval = require("./evil-eval.js");
+const WorldGenerator = require("./generate-ascii-world.js");
 const Token = require("./secret_stuff.json");
 const words = require("./items.json");
 const commands = require("./command-list.json");
@@ -401,12 +402,14 @@ function setGame() {
 const DESIRED_EXCHANGE_RATE = 0.01; // universal:BCBW
 const MAXIMUM_EXCHANGE_RATE = 1; // universal:BCBW
 const UNIVERSAL_TOTAL = 100000; // universal?
+const NORMAL_TOTAL = 10000000; // BCBW?
 function calculateUniversalExchangeRate() {
   let total = 0; // BCBW
   let govMoney = UNIVERSAL_TOTAL / MAXIMUM_EXCHANGE_RATE; // ???
 
   Object.values(userData).forEach(u => total += u.money + u.bankMoney);
-  return 1 / (govMoney + total) * UNIVERSAL_TOTAL;
+  // return 1 / (govMoney + total) * UNIVERSAL_TOTAL;
+  return 1 / (govMoney + (total * UNIVERSAL_TOTAL) / (DESIRED_EXCHANGE_RATE * NORMAL_TOTAL)) * UNIVERSAL_TOTAL;
 }
 
 client.on("ready", () => {
@@ -464,13 +467,17 @@ client.on("message", msg => {
   if (message.slice(-20) === "REPLACE COLON PLEASE") {
     message = message.replace(/COLON/g, ":");
   }
-  if (/\b(hate|hated|hates|hating|hatred|hater|haters)\b/i.test(message)) {
-    let hat = {h: "l", H: "L", a: "o", A: "O", t: "v", T: "V"};
+  if (/\bh(?:(?:4|a)t|8)(?!s)(?=\w)/i.test(message)) {
+    let hat = {h: "l", H: "L", a: "o", A: "O", t: "v", T: "V", 4: "0", 8: "0\\/"};
     Helper.permaSend(msg, `hey hey hey <@${userID}> don't be so negative! try this:`
       + "```" + message.replace(
-        /\b(hat)(e(s|d|rs?)?|ing)\b/gi,
-        (m, c1, c2) => c1.split("").map(l => hat[l]).join("") + c2
-      ).replace(/hatred/gi, "love") + "```");
+        /(h(?:(?:4|a)t|8))r(e|3)d/gi,
+        (m, c1, c2) => c1.split("").map(l => hat[l]).join("")
+          + (c2 === "3" ? "3" : c2.toUpperCase() === c2 ? "E" : "e")
+      ).replace(
+        /\b(h(?:(?:4|a)t|8))(?!s)(?=\w)/gi,
+        (m, c1) => c1.split("").map(l => hat[l]).join("")
+      ) + "```");
     sendOK = false;
     msg.react(thumbs_down);
   } else if (message.slice(0, 6).toLowerCase() === "moofy:") {
@@ -485,12 +492,12 @@ client.on("message", msg => {
     }
     if (conclusive) {
       prepareUserForItem(userID, item, "houseFeatures");
-      if (userData[userID].money < houseData[item].cost) {
-        Helper.tempReply(msg, `**${userData[userID].name}** you don't have enough bitcoin but worse`);
+      if (userData[userID].houseFeatures[item] >= houseData[item].maximum) {
+        Helper.tempReply(msg, `**${userData[userID].name}** you have too many ${item}`);
         sendOK = false;
         msg.react(thumbs_down);
-      } else if (userData[userID].houseFeatures[item] >= houseData[item].maximum) {
-        Helper.tempReply(msg, `**${userData[userID].name}** you have too many ${item}`);
+      } else if (userData[userID].money < houseData[item].cost) {
+        Helper.tempReply(msg, `**${userData[userID].name}** you don't have enough bitcoin but worse`);
         sendOK = false;
         msg.react(thumbs_down);
       } else {
@@ -580,6 +587,34 @@ client.on("message", msg => {
         sendOK = false;
         msg.react(thumbs_down);
       }
+    } else if (command === "gen world of emoji") {
+      Helper.permaSend(msg, WorldGenerator(10, 10, {
+        tableSize: 512,
+        scale: 10,
+        biomeChars: {
+          OCEAN: "🌊",
+          MOUNTAIN: "⛰",
+          PLAINS: "☘",
+          DESERT: "🏜",
+          FOREST: "🌳",
+          VILLAGE: "🏘"
+        },
+        villageChance: 15
+      }).map(a => a.join("")).join("\n"));
+    } else if (command === "gen world") {
+      Helper.permaSend(msg, "```css\n" + WorldGenerator(20, 20, {
+        tableSize: 512,
+        scale: 20,
+        biomeChars: {
+          OCEAN: "~",
+          MOUNTAIN: "^",
+          PLAINS: ",",
+          DESERT: ".",
+          FOREST: ";",
+          VILLAGE: "V"
+        },
+        villageChance: 30
+      }).map(a => a.join(" ")).join("\n") + "```");
     } else {
       Helper.tempReply(msg, {
         embed: {
@@ -763,7 +798,7 @@ client.on("message", msg => {
           }
         }
       } else if (getProfile) {
-        let userDataEntry = userData[userID];
+        let userDataEntry = userData[getProfile[1]];
         Helper.permaSend(msg, {
           embed: {
             title: `${userDataEntry.name}'s profile`,
@@ -1012,7 +1047,7 @@ client.on("message", msg => {
       Helper.tempReply(msg, `**${userData[userID].name}**, you do not have the permissions`);
     }
   } else {
-    let echo = /^echo([cxseu]*):([^]+)/im.exec(message),
+    let echo = /^echo?([cxseu]*):([^]+)/im.exec(message),
     ofNotHaveRegex = /\b(could|might|should|will|would)(?:'?ve| +have)\b/gi,
     ofNotHave = ofNotHaveRegex.exec(message),
     random = /^(actually *)?(?:pick *)?(?:a *)?rand(?:om)? *num(?:ber)? *(?:d'|from|between)? *([0-9]+) *(?:-|to|t'|&|and|n')? *([0-9]+)/i.exec(message),

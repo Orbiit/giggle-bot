@@ -7,7 +7,7 @@ module.exports = {
       + `\n**BCBW**: ${userDataEntry.money}`
       + `\n**daily streak**: ${Date.now() - userDataEntry.lastDaily > day * 2 ? 0 : userDataEntry.dailyStreak}`
       + `\n\n__**Inventory**__`
-      + this.getInventory(userDataEntry, marketData)
+      + (this.getInventory(userDataEntry, marketData) || "\nnothing")
       + `\n\n__**Stats**__`
       + `\ntimes mined: ${userDataEntry.stats.timesMined}`
       + `\nGAME wins: ${userDataEntry.stats.timesWonGame}`
