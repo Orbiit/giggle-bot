@@ -621,7 +621,7 @@ client.on("message", msg => {
           color: colour,
           title: "Property system",
           description: Object.keys(houseData).map(f => {
-            return `\`moofy: ${houseData[f].command}\` - buys a **${f}**`;
+            return `\`moofy: ${houseData[f].command}\` - buys a **${f}** (${houseData[f].cost} bcbw, ${houseData[f].maximum} max)`;
           }).join("\n")
             + `\n\`moofy: house enter\` - enters your house`
             + `\n\`moofy: house exit\` - exits your house`
