@@ -696,16 +696,18 @@ client.on("message", msg => {
       initPagination(msg, "profiles");
     } else if (/\bleader(?:board)?\b/i.test(message)) {
       let peopleMoney = Object.values(userData).filter(u => u.money > 0)
-        .sort((a, b) => b.money - a.money),
-      digitLengths = peopleMoney[0].money.toString().length,
-      spaces = " ".repeat(digitLengths);
-      Helper.permaSend(msg, {
-        embed: {
-          color: colour,
-          title: "people with the most bitcoin but worse",
-          description: peopleMoney.map(u => `\`+${(spaces + u.money).slice(-digitLengths)}\` **${u.name}**`).join("\n")
-        }
-      });
+        .sort((a, b) => b.money - a.money);
+      if (peopleMoney.length) {
+        let digitLengths = peopleMoney[0].money.toString().length,
+        spaces = " ".repeat(digitLengths);
+        Helper.permaSend(msg, {
+          embed: {
+            color: colour,
+            title: "people with the most bitcoin but worse",
+            description: peopleMoney.map(u => `\`+${(spaces + u.money).slice(-digitLengths)}\` **${u.name}**`).join("\n")
+          }
+        });
+      }
     } else if (/\bSHUT *UP\b/.test(message)) {
       if (silenceTimeout !== null) clearTimeout(silenceTimeout);
       Helper.tempReply(msg, `**MOOFY WILL NOW IGNORE COMMANDS FOR A SECOND**`);
@@ -770,32 +772,12 @@ client.on("message", msg => {
           sendOK = false;
         }
       } else if (buy) {
-        let item = getItem(buy[2]);
-        if (item === null) {
+        let item = getItem(buy[2]), quantity;
+        if (buy[1][0] === "m") quantity = Math.floor(userData[userID].money / marketData[item].price);
+        else quantity = +buy[1];
+        if (!Helper.buy(msg, item, quantity, marketData[item], userID, userData[userID], updateUserData, prepareUserForItem)) {
           sendOK = false;
           msg.react(thumbs_down);
-          Helper.tempReply(msg, `**${userData[userID].name}**, that isn't an item i know of`);
-        } else if (!marketData[item].buyable) {
-          sendOK = false;
-          msg.react(thumbs_down);
-          Helper.tempReply(msg, `**${userData[userID].name}**, they don't sell that these days`);
-        } else {
-          let quantity;
-          if (buy[1][0] === "m") quantity = Math.floor(userData[userID].money / marketData[item].price);
-          else quantity = +buy[1];
-          let totalCost = quantity * marketData[item].price;
-          if (totalCost > userData[userID].money) {
-            Helper.tempReply(msg, `**${userData[userID].name}** you don't have enough bitcoin but worse :/`);
-            msg.react(thumbs_down);
-            sendOK = false;
-          } else {
-            userData[userID].money -= totalCost;
-            prepareUserForItem(msg.author.id, item);
-            userData[userID].inventory[item] += quantity;
-            updateUserData();
-            Helper.tempReply(msg, `**${userData[userID].name}** thank you for your purchase.\n`
-              + `you bought ${marketData[item].emoji} x${quantity} (${item}) for \`${totalCost}\` bitcoin but worse`);
-          }
         }
       } else if (getProfile) {
         let userDataEntry = userData[getProfile[1]];
@@ -863,51 +845,9 @@ client.on("message", msg => {
       msg.react(thumbs_down);
     }
   } else if (/^i *want *to *mine\b/i.test(message)) {
-    if (userData[userID].inHouse) {
-      Helper.tempReply(msg, `**${userData[userID].name}**, don't mine inside your house silly`);
-      sendOK = false;
-      msg.react(thumbs_down);
-    } else if (userData[userID].inventory.pickaxe >= 1 || userData[userID].inventory["specialized pickaxe"] >= 1) {
-      let now = Date.now(),
-      usingSpecial = userData[userID].inventory["specialized pickaxe"] >= 1;
-      if (now - userData[userID].lastMine < 600000) {
-        sendOK = false;
-        Helper.tempReply(msg, `you're still tired from your last mining session, **${userData[userID].name}**`);
-      } else {
-        let brokenPickaxe, amount,
-        demoCoinMined = false;
-        if (usingSpecial) {
-          amount = Math.floor(Math.random() ** 3 * 100000 + 500);
-          if (brokenPickaxe = Math.floor(Math.random() * 5) === 0) {
-            amount = Math.ceil(amount * (1 - Math.random() / 2));
-            userData[userID].inventory["specialized pickaxe"]--;
-          } else if (Math.floor(Math.random() * 2) === 0) {
-            prepareUserForItem(msg.author.id, "DemoCoin geode");
-            userData[userID].inventory["DemoCoin geode"]++;
-            demoCoinMined = true;
-            amount = 0;
-          }
-        } else {
-          amount = Math.floor(Math.random() ** 6 * 1000 + 50);
-          if (brokenPickaxe = Math.floor(Math.random() * 3) === 0) {
-            amount = Math.ceil(amount * (1 - Math.random()));
-            userData[userID].inventory.pickaxe--;
-          }
-        }
-        userData[userID].money += amount;
-        userData[userID].stats.timesMined++;
-        userData[userID].lastMine = now;
-        updateUserData();
-        if (usingSpecial && demoCoinMined) {
-          Helper.tempReply(msg, `**${userData[userID].name}** just mined a DEMOCOIN GEODE`
-            + (brokenPickaxe ? `\nyour pickaxe broke :(` : ""));
-        } else {
-          Helper.tempReply(msg, `**${userData[userID].name}** just mined **\`${amount}\`** bitcoin but worse!`
-            + (brokenPickaxe ? `\nyour pickaxe broke :(` : ""));
-        }
-      }
-    } else {
-      Helper.tempReply(msg, `**${userData[userID].name}**, you don't have a pickaxe`);
+    let mineResult = Helper.mine(userData[userID], userID, updateUserData, prepareUserForItem);
+    Helper.tempReply(msg, mineResult.content);
+    if (mineResult.error) {
       sendOK = false;
       msg.react(thumbs_down);
     }
@@ -1061,7 +1001,8 @@ client.on("message", msg => {
     bankPut = /^put *([0-9]+) *(?:money|bcbw)? *in *(?:the|l')? *bank\b/i.exec(message),
     bankTake = /^take *([0-9]+) *(?:money|bcbw)? *(?:from|d') *(?:the|l')? *bank\b/i.exec(message),
     attack = /^attack *([0-9]*)\b/i.exec(message),
-    knowledge = /^what *do *(?:yo)?u *know *ab(?:ou)?t *(me\b|<@!?([0-9]+)>)/.exec(message);
+    knowledge = /^what *do *(?:yo)?u *know *ab(?:ou)?t *(me\b|<@!?([0-9]+)>)/i.exec(message),
+    coffeeMine = /^i *want *to *drink *([0-9]+) *coffee *per *mine *and *mine *([0-9]+) *times/i.exec(message);
     if (echo) { // cxseu
       let flags = echo[1].toLowerCase(),
       circumfix = ~flags.indexOf("c") ? "```" : "",
@@ -1267,11 +1208,7 @@ client.on("message", msg => {
         userData[userID].inventory[item]--;
         switch (item) {
           case "moofy coffee":
-            let affect = Math.floor(Math.random() * 480000 + 300000);
-            userData[userID].stats.coffeeConsumed++;
-            userData[userID].lastMine -= affect;
-            userData[userID].lastRobbery -= affect;
-            Helper.tempReply(msg, `**${userData[userID].name}**: *drinks coffee* yAayayYAYAYYAYAYAYAYAYAYYA *shakes violently*`);
+            Helper.tempReply(msg, Helper.drinkCoffee(userData[userID]));
             break;
           case "DemoCoin geode":
             let amount = Math.floor(Math.random() ** 3 * 1000000 + 5000) / 1000;
@@ -1399,7 +1336,7 @@ client.on("message", msg => {
         messages.splice(3, messages.length - 10);
         messages[3] = "[...]";
       }
-      Helper.tempReply(msg, messages.join("\n"));
+      Helper.permaSend(msg, messages.join("\n"));
     } else if (knowledge) {
       (knowledge[1].toLowerCase() === "me"
         ? new Promise(resolve => resolve(msg.author))
@@ -1422,6 +1359,41 @@ client.on("message", msg => {
           }
         });
       });
+    } else if (coffeeMine) {
+      let mineTimes = +coffeeMine[2],
+      coffeeTimes = +coffeeMine[1],
+      messages = [];
+      if (mineTimes > 1000000 || coffeeTimes > 1000000) {
+        Helper.tempReply(msg, `How dare you try to lag out Moofy **${userData[userID].name}**!`)
+      } else {
+        let start = Date.now();
+        for (let i = mineTimes; i--;) {
+          if (userData[userID].inventory["moofy coffee"] < coffeeTimes) {
+            messages.push("not enough coffee!");
+            sendOK = false;
+            msg.react(thumbs_down);
+            break;
+          } else {
+            userData[userID].inventory["moofy coffee"] -= coffeeTimes;
+            for (let j = coffeeTimes; j--;) messages.push(Helper.drinkCoffee(userData[userID]));
+          }
+          let mineResult = Helper.mine(userData[userID], userID, updateUserData, prepareUserForItem);
+          messages.push(mineResult.content);
+          if (mineResult.error && !mineResult.cont) {
+            sendOK = false;
+            msg.react(thumbs_down);
+            break;
+          }
+        }
+        if (messages.length > 10) {
+          messages.splice(3, messages.length - 10);
+          messages[3] = "[...]";
+        } else if (messages.length < 1) {
+          messages.push("nothing seems to have happened...");
+        }
+        updateUserData();
+        Helper.permaSend(msg, messages.join("\n") + `\n(that took ${Date.now() - start} milliseconds)`);
+      }
     } else {
       sendOK = false;
     }

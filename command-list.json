@@ -24,7 +24,7 @@
   "@moofy-bot GAME": "starts a game with moofy-bot that can earn you some bitcoin but worse (BCBW)\n\n`hint 3` allows you to buy the third letter\n`cancel` cancels the game\n\nmention + `GAME` (it must be in all caps)",
   "@moofy-bot profiles": "lists profiles that have a bitcoin but worse (BCBW) account\n\nmention + `profiles`",
   "@moofy-bot leaderboard": "lists the people with the most bitcoin but worse (BCBW)\n\nmention + `leader(board)`",
-  "exchange 1000 bcbw to democoin": "converts the given amount of bitcoin but worse (BCBW) to DemoCoin\n\n`[exchange|convert][<nonnegative integer>][to|2][democoin|dc]`",
+  "exchange 1000 bcbw to democoin": "converts the given amount of bitcoin but worse (BCBW) to the given currency\n\n`[exchange|convert][<nonnegative integer>][to|2][<currency>]` (supported currencies: `democoin`, `mooney`, `cowbit`)",
   "@moofy-bot tell me more about command #1": "searchs the command help list and gives the nth result\n\nmention + `t(ell)m(e)(more)a(bout)[<query>]((#)[<nonnegative integer>])` (the query can only consist of the letters a to z; 1-indexed result number)",
   "rob from @person": "starts a robbery. while you are robbing, you can't rob more people, and people are able to take up to 4000 bitcoin but worse (BCBW) from you if they catch you. the person must be in the server\n\n`[rob|steal](from|d')[<user mention>]",
   "myprogress": "when robbing, it tells you how much bitcoin but worse (BCBW) you would steal if you run the `run` command. otherwise, it just outputs a list of current robberies for debug purposes.\n\n`myprogress`",
@@ -38,5 +38,6 @@
   "attack": "attacks a random robber using a gun and consumes the gun. if the robber has a gun, they lose it but can continue robbing. however, if they do not have a gun, they get caught. you can add a number after the command to attack multiple times in a row\n\n`attack(<nonnegative integer>)` (default: 1)",
   "idea for moofy: please fix the bugs": "saves the text after the colon to a txt file where the bot maker will check some time\n\n`idea(4|for)moofy:`",
   "moofy:": "prefix for the Property system; type `moofy:` for a list of commands\n\n`moofy:`",
-  "what do you know about me": "lists most of the information the bot has access to about the given user\n\n`whatdo(yo)uknowab(ou)t[me|[<user mention>]]`"
+  "what do you know about me": "lists most of the information the bot has access to about the given user\n\n`whatdo(yo)uknowab(ou)t[me|[<user mention>]]`",
+  "I want to drink 2 coffee per mine and mine 200 times": "automates mining by repeatedly simulating some intense coffee drinking and mining\n\n`iwanttodrink[<nonnegative integer>]coffeepermineandmine[<nonnegative integer>]times`"
 }
